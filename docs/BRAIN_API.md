@@ -24,11 +24,12 @@ App Serviceの「設定」→「環境変数」に登録します。
 
 ```text
 BRAIN_API_ENDPOINT=https://<BrainAPI-host>
-BRAIN_API_PROJECT_ID=<採点用Project ID>
+BRAIN_API_PROJECT_ID_DRIVE=<動画試験の採点用Project ID>
+BRAIN_API_PROJECT_ID_MAIL=<メール試験の採点用Project ID>
 BRAIN_API_KEY=<採点用API Key>
 ```
 
-以前の説明に追加して、`BRAIN_API_PROJECT_ID`も必須です。
+動画試験では`BRAIN_API_PROJECT_ID_DRIVE`、メール試験では`BRAIN_API_PROJECT_ID_MAIL`を使用します。エンドポイントとAPI Keyは両試験で共通です。
 
 ## リクエスト
 

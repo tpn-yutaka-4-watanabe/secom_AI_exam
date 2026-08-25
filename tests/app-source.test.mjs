@@ -24,3 +24,11 @@ test("each exam is graded three times", async () => {
   assert.match(source, /videoPrompt/);
   assert.match(source, /emailPrompt/);
 });
+
+test("each exam uses its own BrainAPI project", async () => {
+  const source = await read("lib/brain-api.ts");
+  assert.match(source, /BRAIN_API_PROJECT_ID_DRIVE/);
+  assert.match(source, /BRAIN_API_PROJECT_ID_MAIL/);
+  assert.match(source, /gradeThreeTimes\(videoPrompt\(record\), `\$\{record\.id\}-video`, "video"\)/);
+  assert.match(source, /gradeThreeTimes\(emailPrompt\(record\), `\$\{record\.id\}-email`, "email"\)/);
+});

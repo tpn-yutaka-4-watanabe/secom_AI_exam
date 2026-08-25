@@ -4,6 +4,8 @@ const brainPath = "/api/v1/prediction";
 
 class BrainConfigurationError extends Error {}
 
+type ExamType = "video" | "email";
+
 function predictionEndpoint() {
   const configured = process.env.BRAIN_API_ENDPOINT?.trim();
   if (!configured) throw new BrainConfigurationError("BRAIN_API_ENDPOINT が設定されていません。");
@@ -11,11 +13,16 @@ function predictionEndpoint() {
   return base.endsWith(brainPath) ? base : `${base}${brainPath}`;
 }
 
-function brainConfiguration() {
+function brainConfiguration(examType: ExamType) {
   const apiKey = process.env.BRAIN_API_KEY?.trim();
-  const projectId = process.env.BRAIN_API_PROJECT_ID?.trim();
+  const projectId =
+    examType === "video"
+      ? process.env.BRAIN_API_PROJECT_ID_DRIVE?.trim()
+      : process.env.BRAIN_API_PROJECT_ID_MAIL?.trim();
+  const projectIdEnvironmentName =
+    examType === "video" ? "BRAIN_API_PROJECT_ID_DRIVE" : "BRAIN_API_PROJECT_ID_MAIL";
   if (!apiKey) throw new BrainConfigurationError("BRAIN_API_KEY が設定されていません。");
-  if (!projectId) throw new BrainConfigurationError("BRAIN_API_PROJECT_ID が設定されていません。");
+  if (!projectId) throw new BrainConfigurationError(`${projectIdEnvironmentName} が設定されていません。`);
   return { endpoint: predictionEndpoint(), apiKey, projectId };
 }
 
@@ -44,10 +51,15 @@ async function parseResponse(response: Response) {
   }
 }
 
-async function runAttempt(prompt: string, uid: string, attempt: number): Promise<BrainAttempt> {
+async function runAttempt(
+  prompt: string,
+  uid: string,
+  attempt: number,
+  examType: ExamType,
+): Promise<BrainAttempt> {
   const startedAt = new Date().toISOString();
   try {
-    const { endpoint, apiKey, projectId } = brainConfiguration();
+    const { endpoint, apiKey, projectId } = brainConfiguration(examType);
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -86,10 +98,14 @@ async function runAttempt(prompt: string, uid: string, attempt: number): Promise
   }
 }
 
-async function gradeThreeTimes(prompt: string, uidPrefix: string): Promise<GradingResult> {
+async function gradeThreeTimes(
+  prompt: string,
+  uidPrefix: string,
+  examType: ExamType,
+): Promise<GradingResult> {
   const attempts: BrainAttempt[] = [];
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    attempts.push(await runAttempt(prompt, `${uidPrefix}-${attempt}`, attempt));
+    attempts.push(await runAttempt(prompt, `${uidPrefix}-${attempt}`, attempt, examType));
   }
   return {
     status: attempts.every((attempt) => attempt.status === "success") ? "completed" : "error",
@@ -127,8 +143,8 @@ function emailPrompt(record: SubmissionRecord) {
 
 export async function gradeSubmission(record: SubmissionRecord) {
   const [video, email] = await Promise.all([
-    gradeThreeTimes(videoPrompt(record), `${record.id}-video`),
-    gradeThreeTimes(emailPrompt(record), `${record.id}-email`),
+    gradeThreeTimes(videoPrompt(record), `${record.id}-video`, "video"),
+    gradeThreeTimes(emailPrompt(record), `${record.id}-email`, "email"),
   ]);
   return { video, email };
 }
@@ -136,7 +152,8 @@ export async function gradeSubmission(record: SubmissionRecord) {
 export function getBrainConfigurationStatus() {
   return {
     endpointConfigured: Boolean(process.env.BRAIN_API_ENDPOINT?.trim()),
-    projectIdConfigured: Boolean(process.env.BRAIN_API_PROJECT_ID?.trim()),
+    videoProjectIdConfigured: Boolean(process.env.BRAIN_API_PROJECT_ID_DRIVE?.trim()),
+    mailProjectIdConfigured: Boolean(process.env.BRAIN_API_PROJECT_ID_MAIL?.trim()),
     apiKeyConfigured: Boolean(process.env.BRAIN_API_KEY?.trim()),
   };
 }
