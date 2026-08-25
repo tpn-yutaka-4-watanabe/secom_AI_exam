@@ -1,50 +1,88 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CandidateBadge } from "../components/CandidateBadge";
 import { ExamShell } from "../components/ExamShell";
-import { loadExamDraft, saveReceipt, updateEmailDraft } from "../lib/client-storage";
-import { receivedEmail } from "@/lib/exam-content";
-import type { EmailReply, ExamDraft, SubmissionReceipt } from "@/lib/types";
+import { ExamStartForm } from "../components/ExamStartForm";
+import {
+  clearExamDraft,
+  loadExamDraft,
+  saveReceipt,
+  saveReceivedEmailDraft,
+  updateEmailDraft,
+} from "../lib/client-storage";
+import type { EmailReply, ExamDraft, ReceivedEmail, SubmissionReceipt } from "@/lib/types";
 
-const initialReply: EmailReply = {
-  to: "田中 一郎 様 <tanaka@example.jp>",
-  subject: "Re: 新営業所の防犯対策について相談",
-  body: "",
-};
+function initialReply(receivedEmail: ReceivedEmail): EmailReply {
+  return {
+    to: receivedEmail.from,
+    subject: `Re: ${receivedEmail.subject}`,
+    body: "",
+  };
+}
 
 export default function EmailTestPage() {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
   const [draft, setDraft] = useState<ExamDraft | null>(null);
-  const [reply, setReply] = useState<EmailReply>(initialReply);
+  const [receivedEmail, setReceivedEmail] = useState<ReceivedEmail | null>(null);
+  const [reply, setReply] = useState<EmailReply | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const stored = loadExamDraft();
+      const stored = loadExamDraft("email");
       setDraft(stored);
-      setReply(stored?.emailReply ?? initialReply);
+      if (stored?.receivedEmail) {
+        setReceivedEmail(stored.receivedEmail);
+        setReply(stored.emailReply ?? initialReply(stored.receivedEmail));
+      }
+      setReady(true);
     }, 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    if (draft) updateEmailDraft(reply);
+    if (!draft || receivedEmail) return;
+    const activeDraft = draft;
+    let active = true;
+
+    async function loadContent() {
+      try {
+        const response = await fetch("/api/exam-content/email", { cache: "no-store" });
+        const payload = (await response.json()) as { receivedEmail?: ReceivedEmail; error?: string };
+        if (!response.ok || !payload.receivedEmail) throw new Error(payload.error || "受信メールを読み込めませんでした。");
+        if (!active) return;
+        setReceivedEmail(payload.receivedEmail);
+        saveReceivedEmailDraft(payload.receivedEmail);
+        setReply(activeDraft.emailReply ?? initialReply(payload.receivedEmail));
+      } catch (contentError) {
+        if (active) setError(contentError instanceof Error ? contentError.message : "受信メールを読み込めませんでした。");
+      }
+    }
+
+    void loadContent();
+    return () => { active = false; };
+  }, [draft, receivedEmail]);
+
+  useEffect(() => {
+    if (draft && reply) updateEmailDraft(reply);
   }, [draft, reply]);
+
+  function beginDraft(startedDraft: ExamDraft) {
+    setDraft(startedDraft);
+    setReceivedEmail(null);
+    setReply(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!draft || submitting) return;
-    if (!draft.videoFindings.length) {
-      setError("動画試験の回答がありません。動画試験に戻って入力してください。");
-      return;
-    }
-    if (!reply.body.trim()) {
-      setError("返信本文を入力してください。");
+    if (!draft || !receivedEmail || !reply || submitting) return;
+    if (!reply.to.trim() || !reply.subject.trim() || !reply.body.trim()) {
+      setError("宛先、件名、返信本文をすべて入力してください。");
       return;
     }
     if (!confirmed) {
@@ -58,11 +96,23 @@ export default function EmailTestPage() {
       const response = await fetch("/api/submissions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...draft, emailReply: { ...reply, body: reply.body.trim() } }),
+        body: JSON.stringify({
+          examType: "email",
+          candidateNumber: draft.candidateNumber,
+          candidateName: draft.candidateName,
+          startedAt: draft.startedAt,
+          receivedEmail,
+          emailReply: {
+            to: reply.to.trim(),
+            subject: reply.subject.trim(),
+            body: reply.body.trim(),
+          },
+        }),
       });
       const payload = (await response.json()) as SubmissionReceipt & { error?: string };
       if (!response.ok) throw new Error(payload.error || "提出処理に失敗しました。");
       saveReceipt(payload);
+      clearExamDraft("email");
       router.push("/complete");
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "提出処理に失敗しました。");
@@ -70,24 +120,36 @@ export default function EmailTestPage() {
     }
   }
 
+  if (!ready) {
+    return <ExamShell step={1} examType="email"><main className="page-loading">読み込んでいます…</main></ExamShell>;
+  }
+
   if (!draft) {
     return (
-      <ExamShell step={3}>
+      <ExamShell step={1} examType="email">
+        <ExamStartForm examType="email" onStarted={beginDraft} />
+      </ExamShell>
+    );
+  }
+
+  if (!receivedEmail || !reply) {
+    return (
+      <ExamShell step={2} examType="email">
         <main className="missing-session">
-          <h1>受験情報が確認できません</h1>
-          <p>試験開始画面から受験を開始してください。</p>
-          <Link href="/" className="primary-button">開始画面へ戻る</Link>
+          <h1>メール問題を読み込んでいます</h1>
+          <p>このまま少しお待ちください。</p>
+          {error && <div className="form-error">{error}</div>}
         </main>
       </ExamShell>
     );
   }
 
   return (
-    <ExamShell step={3}>
+    <ExamShell step={2} examType="email">
       <main className="exam-page email-page">
         <div className="exam-title-row">
           <div>
-            <div className="eyebrow">SECTION 02</div>
+            <div className="eyebrow">EMAIL RESPONSE EXAM</div>
             <h1>メール対応試験</h1>
             <p>受領メールを読み、営業担当者として適切な返信を作成してください。</p>
           </div>
@@ -123,7 +185,7 @@ export default function EmailTestPage() {
                   <textarea
                     value={reply.body}
                     onChange={(event) => setReply({ ...reply, body: event.target.value })}
-                    placeholder="田中様\n\nお問い合わせいただき、ありがとうございます。"
+                    placeholder="ご担当者様\n\nお問い合わせいただき、ありがとうございます。"
                     rows={18}
                     required
                   />
@@ -136,7 +198,7 @@ export default function EmailTestPage() {
           <div className="final-confirmation">
             <label className="check-line">
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-              <span>動画試験とメール試験の回答内容を確認しました。これを最終回答として提出します。</span>
+              <span>メール対応試験の回答内容を確認しました。これを最終回答として提出します。</span>
             </label>
             <p>提出後は回答を変更できません。</p>
           </div>
@@ -144,9 +206,9 @@ export default function EmailTestPage() {
           {error && <div className="form-error" role="alert">{error}</div>}
 
           <div className="exam-actions">
-            <Link href="/video-test" className="secondary-button">動画試験に戻る</Link>
+            <span className="autosave-note">入力内容はこの端末に自動保存されます</span>
             <button className="primary-button submit-button" type="submit" disabled={submitting}>
-              {submitting ? "回答を保存・採点しています…" : "試験を終了して提出する"}
+              {submitting ? "回答を保存・採点しています…" : "メール試験の回答を提出する"}
               {!submitting && <span>→</span>}
             </button>
           </div>

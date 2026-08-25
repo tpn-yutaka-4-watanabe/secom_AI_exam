@@ -122,7 +122,7 @@ function videoPrompt(record: SubmissionRecord) {
     `受験番号: ${record.candidateNumber}`,
     `受験者名: ${record.candidateName}`,
     "回答:",
-    JSON.stringify(record.videoTest.findings, null, 2),
+    JSON.stringify(record.videoTest?.findings ?? [], null, 2),
   ].join("\n");
 }
 
@@ -135,16 +135,20 @@ function emailPrompt(record: SubmissionRecord) {
     `受験番号: ${record.candidateNumber}`,
     `受験者名: ${record.candidateName}`,
     "受領メール:",
-    JSON.stringify(record.emailTest.receivedEmail, null, 2),
+    JSON.stringify(record.emailTest?.receivedEmail ?? {}, null, 2),
     "受験者の返信:",
-    JSON.stringify(record.emailTest.reply, null, 2),
+    JSON.stringify(record.emailTest?.reply ?? {}, null, 2),
   ].join("\n");
 }
 
 export async function gradeSubmission(record: SubmissionRecord) {
   const [video, email] = await Promise.all([
-    gradeThreeTimes(videoPrompt(record), `${record.id}-video`, "video"),
-    gradeThreeTimes(emailPrompt(record), `${record.id}-email`, "email"),
+    record.videoTest
+      ? gradeThreeTimes(videoPrompt(record), `${record.id}-video`, "video")
+      : Promise.resolve(undefined),
+    record.emailTest
+      ? gradeThreeTimes(emailPrompt(record), `${record.id}-email`, "email")
+      : Promise.resolve(undefined),
   ]);
   return { video, email };
 }

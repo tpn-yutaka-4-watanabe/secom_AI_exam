@@ -263,6 +263,8 @@ https://secom-grade4-exam-dacxdqaccadpbaf8.japaneast-01.azurewebsites.net/admin/
 - 回答が保存されている
 - 動画試験のBrainAPI応答が3件ある
 - メール試験のBrainAPI応答が3件ある
+- 動画試験の前に「待機状態へ戻す」→「一斉再生」が動作する
+- メール問題を管理画面で保存し、新しく開始したメール試験へ反映される
 
 ## 11. 2回目以降の通常デプロイ
 

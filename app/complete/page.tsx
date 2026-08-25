@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ExamShell } from "../components/ExamShell";
-import { clearExamDraft, loadReceipt } from "../lib/client-storage";
+import { clearExamData, loadReceipt } from "../lib/client-storage";
 import type { SubmissionReceipt } from "@/lib/types";
 
 export default function CompletePage() {
@@ -15,11 +15,11 @@ export default function CompletePage() {
   }, []);
 
   function restart() {
-    clearExamDraft();
+    if (receipt) clearExamData(receipt.examType);
   }
 
   return (
-    <ExamShell step={4} compactHeader>
+    <ExamShell step={3} examType={receipt?.examType} compactHeader>
       <main className="complete-page">
         <div className="complete-mark" aria-hidden="true">✓</div>
         <div className="eyebrow">EXAM COMPLETED</div>
@@ -31,6 +31,7 @@ export default function CompletePage() {
             <div><span>受付番号</span><strong>{receipt.id}</strong></div>
             <div><span>受験番号</span><strong>{receipt.candidateNumber}</strong></div>
             <div><span>受験者名</span><strong>{receipt.candidateName}</strong></div>
+            <div><span>試験種別</span><strong>{receipt.examType === "video" ? "動画確認試験" : "メール対応試験"}</strong></div>
             <div><span>受付日時</span><strong>{new Date(receipt.submittedAt).toLocaleString("ja-JP")}</strong></div>
             <div className="receipt-status">
               <span>採点接続状況</span>
@@ -50,7 +51,12 @@ export default function CompletePage() {
           <p>採点結果は管理画面に保存されます。受験者本人にはこの画面で得点を表示しません。</p>
         </div>
 
-        <Link href="/" onClick={restart} className="text-link">別の受験を開始する</Link>
+        {receipt && (
+          <Link href={receipt.examType === "video" ? "/video-test" : "/email-test"} onClick={restart} className="text-link">
+            同じ試験を別の受験者で開始する
+          </Link>
+        )}
+        <Link href="/" className="text-link">試験選択へ戻る</Link>
       </main>
     </ExamShell>
   );

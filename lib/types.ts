@@ -1,23 +1,17 @@
+export type ExamType = "video" | "email";
+
 export type VideoFinding = {
   id: string;
-  time: string;
-  category: string;
   issue: string;
   recommendation: string;
+  time?: string;
+  category?: string;
 };
 
 export type EmailReply = {
   to: string;
   subject: string;
   body: string;
-};
-
-export type ExamDraft = {
-  candidateNumber: string;
-  candidateName: string;
-  startedAt: string;
-  videoFindings: VideoFinding[];
-  emailReply: EmailReply | null;
 };
 
 export type BrainAttempt = {
@@ -43,24 +37,45 @@ export type ReceivedEmail = {
   body: string;
 };
 
+export type EmailExamContent = ReceivedEmail & {
+  updatedAt?: string;
+};
+
+export type ExamDraft = {
+  examType: ExamType;
+  candidateNumber: string;
+  candidateName: string;
+  startedAt: string;
+  videoFindings: VideoFinding[];
+  emailReply: EmailReply | null;
+  receivedEmail?: ReceivedEmail;
+};
+
+export type VideoPlaybackState = {
+  runId: string;
+  startedAt: string | null;
+  updatedAt: string;
+};
+
 export type SubmissionRecord = {
   id: string;
+  examType?: ExamType;
   candidateNumber: string;
   candidateName: string;
   startedAt: string;
   submittedAt: string;
   overallStatus: "completed" | "grading_error";
-  videoTest: {
+  videoTest?: {
     videoFile: string;
     findings: VideoFinding[];
   };
-  emailTest: {
+  emailTest?: {
     receivedEmail: ReceivedEmail;
     reply: EmailReply;
   };
   grading: {
-    video: GradingResult;
-    email: GradingResult;
+    video?: GradingResult;
+    email?: GradingResult;
   };
 };
 
@@ -68,6 +83,6 @@ export type SubmissionReceipt = Pick<
   SubmissionRecord,
   "id" | "candidateNumber" | "candidateName" | "submittedAt" | "overallStatus"
 > & {
-  videoStatus: GradingResult["status"];
-  emailStatus: GradingResult["status"];
+  examType: ExamType;
+  gradingStatus: GradingResult["status"];
 };

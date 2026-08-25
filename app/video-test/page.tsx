@@ -1,223 +1,374 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CandidateBadge } from "../components/CandidateBadge";
 import { ExamShell } from "../components/ExamShell";
-import { loadExamDraft, updateVideoDraft } from "../lib/client-storage";
-import type { ExamDraft, VideoFinding } from "@/lib/types";
+import { ExamStartForm } from "../components/ExamStartForm";
+import {
+  clearExamDraft,
+  loadExamDraft,
+  saveReceipt,
+  updateVideoDraft,
+} from "../lib/client-storage";
+import type { ExamDraft, SubmissionReceipt, VideoFinding, VideoPlaybackState } from "@/lib/types";
 
-const categories = ["安全配慮", "顧客対応", "情報管理", "言動・マナー", "業務手順", "その他"];
+const initialRowCount = 6;
 
 function createFinding(): VideoFinding {
   return {
     id: crypto.randomUUID(),
-    time: "",
-    category: "安全配慮",
     issue: "",
     recommendation: "",
   };
 }
 
-function formatTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const rest = Math.floor(seconds % 60);
-  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+function withInitialRows(items: VideoFinding[]) {
+  const normalized = items.map((item) => ({
+    id: item.id || crypto.randomUUID(),
+    issue: item.issue ?? "",
+    recommendation: item.recommendation ?? "",
+  }));
+  while (normalized.length < initialRowCount) normalized.push(createFinding());
+  return normalized;
+}
+
+function elapsedSeconds(startedAt: string) {
+  return Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 1000);
 }
 
 export default function VideoTestPage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const primingRef = useRef(false);
+  const playbackRef = useRef<VideoPlaybackState | null>(null);
+  const preparedRef = useRef(false);
+  const endedRef = useRef(false);
+  const [ready, setReady] = useState(false);
   const [draft, setDraft] = useState<ExamDraft | null>(null);
   const [findings, setFindings] = useState<VideoFinding[]>([]);
-  const [reviewMode, setReviewMode] = useState(false);
+  const [playback, setPlayback] = useState<VideoPlaybackState | null>(null);
+  const [prepared, setPrepared] = useState(false);
+  const [videoEnded, setVideoEnded] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      const stored = loadExamDraft();
+      const stored = loadExamDraft("video");
       setDraft(stored);
-      setFindings(stored?.videoFindings.length ? stored.videoFindings : [createFinding()]);
+      if (stored) setFindings(withInitialRows(stored.videoFindings));
+      setReady(true);
     }, 0);
     return () => window.clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
-    if (draft) updateVideoDraft(findings);
+    if (draft && findings.length) updateVideoDraft(findings);
   }, [draft, findings]);
 
-  function updateFinding(id: string, field: keyof VideoFinding, value: string) {
+  useEffect(() => {
+    playbackRef.current = playback;
+  }, [playback]);
+
+  useEffect(() => {
+    preparedRef.current = prepared;
+  }, [prepared]);
+
+  useEffect(() => {
+    endedRef.current = videoEnded;
+  }, [videoEnded]);
+
+  useEffect(() => {
+    if (!draft) return;
+    let active = true;
+
+    async function refreshPlayback() {
+      try {
+        const response = await fetch("/api/video-playback", { cache: "no-store" });
+        if (!response.ok) throw new Error();
+        const value = (await response.json()) as VideoPlaybackState;
+        if (active) {
+          playbackRef.current = value;
+          setPlayback(value);
+          if (!value.startedAt) {
+            endedRef.current = false;
+            const video = videoRef.current;
+            if (video && !primingRef.current) {
+              if (!video.paused) video.pause();
+              video.currentTime = 0;
+            }
+            setVideoEnded(false);
+          } else if (preparedRef.current) {
+            void synchronizeVideo(value.startedAt);
+          }
+        }
+      } catch {
+        if (active) setError("一斉再生の状態を確認できません。試験官に申し出てください。");
+      }
+    }
+
+    void refreshPlayback();
+    const interval = window.setInterval(refreshPlayback, 1_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [draft]);
+
+  async function synchronizeVideo(startedAt: string) {
+    const video = videoRef.current;
+    if (!video || !preparedRef.current || !Number.isFinite(video.duration)) return;
+    const expectedTime = elapsedSeconds(startedAt);
+    if (expectedTime >= video.duration) {
+      video.currentTime = video.duration;
+      endedRef.current = true;
+      setVideoEnded(true);
+      return;
+    }
+    if (Math.abs(video.currentTime - expectedTime) > 1.25) video.currentTime = expectedTime;
+    if (video.paused) {
+      try {
+        await video.play();
+        setError("");
+      } catch {
+        setError("動画を自動再生できません。試験官に申し出て、再生準備をやり直してください。");
+      }
+    }
+  }
+
+  function beginDraft(startedDraft: ExamDraft) {
+    setDraft(startedDraft);
+    setFindings(withInitialRows([]));
+  }
+
+  async function preparePlayback() {
+    const video = videoRef.current;
+    if (!video) return;
+    setError("");
+    primingRef.current = true;
+    try {
+      await video.play();
+      video.pause();
+      video.currentTime = 0;
+      preparedRef.current = true;
+      setPrepared(true);
+      const startedAt = playbackRef.current?.startedAt;
+      if (startedAt) void synchronizeVideo(startedAt);
+    } catch {
+      setError("再生準備に失敗しました。ブラウザーの音声再生を許可して、もう一度押してください。");
+    } finally {
+      primingRef.current = false;
+    }
+  }
+
+  function updateFinding(id: string, field: "issue" | "recommendation", value: string) {
     setFindings((current) => current.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   }
 
-  function markCurrentTime(id: string) {
-    updateFinding(id, "time", formatTime(videoRef.current?.currentTime ?? 0));
+  function addFinding() {
+    setFindings((current) => [...current, createFinding()]);
   }
 
-  function removeFinding(id: string) {
-    setFindings((current) => current.length === 1 ? current : current.filter((item) => item.id !== id));
+  function preventManualSeeking() {
+    const video = videoRef.current;
+    const startedAt = playbackRef.current?.startedAt;
+    if (!video || !startedAt || primingRef.current || !Number.isFinite(video.duration)) return;
+    const expectedTime = Math.min(elapsedSeconds(startedAt), video.duration);
+    if (Math.abs(video.currentTime - expectedTime) > 1.25) video.currentTime = expectedTime;
   }
 
-  function beginReview() {
-    if (!findings.some((item) => item.issue.trim())) {
-      setError("少なくとも1件の指摘事項を入力してください。");
+  function preventManualPause() {
+    const startedAt = playbackRef.current?.startedAt;
+    if (startedAt && preparedRef.current && !endedRef.current && !primingRef.current) {
+      void synchronizeVideo(startedAt);
+    }
+  }
+
+  async function submitVideoExam() {
+    if (!draft || submitting) return;
+    if (!videoEnded) {
+      setError("動画が終了するまで提出できません。");
       return;
     }
+    const usedRows = findings.filter((item) => item.issue.trim() || item.recommendation.trim());
+    if (!usedRows.length) {
+      setError("少なくとも1件、不適切な箇所とあるべき対応を入力してください。");
+      return;
+    }
+    if (usedRows.some((item) => !item.issue.trim() || !item.recommendation.trim())) {
+      setError("記入した欄は「不適切だと考える箇所」と「あるべき対応」の両方を入力してください。");
+      return;
+    }
+
+    setSubmitting(true);
     setError("");
-    setReviewMode(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          examType: "video",
+          candidateNumber: draft.candidateNumber,
+          candidateName: draft.candidateName,
+          startedAt: draft.startedAt,
+          videoFindings: usedRows.map((item) => ({
+            ...item,
+            issue: item.issue.trim(),
+            recommendation: item.recommendation.trim(),
+          })),
+        }),
+      });
+      const payload = (await response.json()) as SubmissionReceipt & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "提出処理に失敗しました。");
+      saveReceipt(payload);
+      clearExamDraft("video");
+      router.push("/complete");
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : "提出処理に失敗しました。");
+      setSubmitting(false);
+    }
   }
 
-  function continueToEmail() {
-    const cleaned = findings
-      .filter((item) => item.issue.trim())
-      .map((item) => ({
-        ...item,
-        time: item.time.trim(),
-        issue: item.issue.trim(),
-        recommendation: item.recommendation.trim(),
-      }));
-    if (cleaned.some((item) => !item.recommendation)) {
-      setError("すべての指摘について「あるべき対応」を入力してください。");
-      return;
-    }
-    updateVideoDraft(cleaned);
-    router.push("/email-test");
+  if (!ready) {
+    return <ExamShell step={1} examType="video"><main className="page-loading">読み込んでいます…</main></ExamShell>;
   }
 
   if (!draft) {
     return (
-      <ExamShell step={2}>
-        <main className="missing-session">
-          <h1>受験情報が確認できません</h1>
-          <p>試験開始画面から受験番号と氏名を入力してください。</p>
-          <Link href="/" className="primary-button">開始画面へ戻る</Link>
-        </main>
+      <ExamShell step={1} examType="video">
+        <ExamStartForm examType="video" onStarted={beginDraft} />
       </ExamShell>
     );
   }
 
+  const playbackStarted = Boolean(playback?.startedAt);
+  const filledCount = findings.filter((item) => item.issue.trim() || item.recommendation.trim()).length;
+
   return (
-    <ExamShell step={2}>
+    <ExamShell step={2} examType="video">
       <main className="exam-page">
         <div className="exam-title-row">
           <div>
-            <div className="eyebrow">SECTION 01</div>
-            <h1>{reviewMode ? "指摘内容の清書・確認" : "動画確認試験"}</h1>
-            <p>
-              {reviewMode
-                ? "記録した内容を読み直し、第三者に伝わる表現へ整えてください。"
-                : "映像を確認し、不適切だと考える箇所と望ましい対応を記録してください。"}
-            </p>
+            <div className="eyebrow">VIDEO OBSERVATION EXAM</div>
+            <h1>{videoEnded ? "回答の清書・確認" : "動画確認試験"}</h1>
+            <p>{videoEnded ? "記入内容を読み直し、あるべき対応と対になっていることを確認してください。" : "試験官の一斉再生に合わせて映像を確認してください。"}</p>
           </div>
           <CandidateBadge number={draft.candidateNumber} name={draft.candidateName} />
         </div>
 
-        <div className={reviewMode ? "video-workspace review" : "video-workspace"}>
+        <div className="video-workspace simplified">
           <section className="video-panel" aria-label="試験動画">
             <div className="panel-heading dark">
               <span>試験映像</span>
-              <small>必要に応じて一時停止・巻き戻しができます</small>
+              <small>{videoEnded ? "映像は終了しました" : playbackStarted ? "一斉再生中" : "試験官の開始操作を待っています"}</small>
             </div>
-            <div className="video-frame">
+            <div className="video-frame locked-video-frame">
               <video
                 ref={videoRef}
                 src="/training-video.mp4"
-                controls
-                preload="metadata"
-                onEnded={() => setReviewMode(true)}
+                preload="auto"
+                playsInline
+                disablePictureInPicture
+                controlsList="nodownload noplaybackrate noremoteplayback"
+                tabIndex={-1}
+                onContextMenu={(event) => event.preventDefault()}
+                onLoadedMetadata={() => {
+                  const startedAt = playbackRef.current?.startedAt;
+                  if (startedAt) void synchronizeVideo(startedAt);
+                }}
+                onSeeking={preventManualSeeking}
+                onPause={preventManualPause}
+                onEnded={() => {
+                  endedRef.current = true;
+                  setVideoEnded(true);
+                }}
               >
-                お使いのブラウザは動画再生に対応していません。
+                お使いのブラウザーは動画再生に対応していません。
               </video>
+              {!prepared && (
+                <div className="video-prepare-overlay">
+                  <strong>再生準備が必要です</strong>
+                  <p>試験官が一斉再生する前に、下のボタンを一度押してください。</p>
+                  <button className="primary-button" type="button" onClick={preparePlayback}>再生準備を完了する</button>
+                </div>
+              )}
+            </div>
+            <div className={`playback-status ${playbackStarted ? "playing" : "waiting"}`}>
+              <span className="status-dot" />
+              {!prepared
+                ? "再生準備を完了してください"
+                : videoEnded
+                  ? "映像終了・回答を清書できます"
+                  : playbackStarted
+                    ? "管理者による一斉再生中です"
+                    : "準備完了・試験官の開始をお待ちください"}
             </div>
             <div className="video-hint">
-              <span>記録のヒント</span>
-              気づいた時点で動画を止め、「現在時刻」を押してから内容を入力してください。
+              動画は受験者側で停止・巻き戻し・早送りできません。問題がある場合は画面を操作せず、試験官に申し出てください。
             </div>
           </section>
 
-          <section className="findings-panel">
+          <section className="findings-panel simplified-findings">
             <div className="panel-heading">
               <div>
-                <span>{reviewMode ? "提出する指摘事項" : "指摘事項メモ"}</span>
-                <small>{findings.filter((item) => item.issue.trim()).length}件入力済み</small>
+                <span>指摘内容</span>
+                <small>{filledCount}件記入中</small>
               </div>
-              {!reviewMode && (
-                <button className="secondary-button small" onClick={() => setFindings((current) => [...current, createFinding()])}>
-                  ＋ 行を追加
-                </button>
-              )}
+              <small>左右を一組として記入してください</small>
             </div>
 
-            <div className="finding-list">
+            <div className="finding-list finding-table-list">
+              <div className="finding-column-head" aria-hidden="true">
+                <span>不適切だと考える箇所</span>
+                <span>あるべき対応</span>
+              </div>
               {findings.map((finding, index) => (
-                <article className="finding-card" key={finding.id}>
-                  <div className="finding-card-head">
-                    <strong>指摘 {String(index + 1).padStart(2, "0")}</strong>
-                    {findings.length > 1 && !reviewMode && (
-                      <button className="text-button danger" onClick={() => removeFinding(finding.id)} aria-label={`指摘${index + 1}を削除`}>
-                        削除
-                      </button>
-                    )}
-                  </div>
-                  <div className="finding-meta">
-                    <label>
-                      <span>映像時刻</span>
-                      <div className="time-input">
-                        <input
-                          value={finding.time}
-                          onChange={(event) => updateFinding(finding.id, "time", event.target.value)}
-                          placeholder="00:00"
-                        />
-                        {!reviewMode && <button onClick={() => markCurrentTime(finding.id)}>現在時刻</button>}
-                      </div>
-                    </label>
-                    <label>
-                      <span>分類</span>
-                      <select value={finding.category} onChange={(event) => updateFinding(finding.id, "category", event.target.value)}>
-                        {categories.map((category) => <option key={category}>{category}</option>)}
-                      </select>
-                    </label>
-                  </div>
+                <article className="finding-row" key={finding.id}>
+                  <span className="finding-number">{String(index + 1).padStart(2, "0")}</span>
                   <label>
-                    <span>不適切だと考える箇所</span>
+                    <span>不適切だと考える箇所 {index + 1}</span>
                     <textarea
                       value={finding.issue}
                       onChange={(event) => updateFinding(finding.id, "issue", event.target.value)}
-                      placeholder="誰が読んでも状況が分かるように記載してください"
-                      rows={3}
+                      placeholder="映像内で不適切だと考えた行動や状況を記入"
+                      rows={4}
                     />
                   </label>
                   <label>
-                    <span>あるべき対応</span>
+                    <span>あるべき対応 {index + 1}</span>
                     <textarea
                       value={finding.recommendation}
                       onChange={(event) => updateFinding(finding.id, "recommendation", event.target.value)}
-                      placeholder="どのように対応すべきだったか記載してください"
-                      rows={3}
+                      placeholder="本来どのように対応すべきだったかを記入"
+                      rows={4}
                     />
                   </label>
                 </article>
               ))}
+              <button className="add-finding-button" type="button" onClick={addFinding} aria-label="記入欄を増やす">
+                <span aria-hidden="true">＋</span>
+                記入欄を増やす
+              </button>
             </div>
           </section>
         </div>
 
+        {videoEnded && (
+          <div className="review-notice">
+            <strong>映像が終了しました</strong>
+            <span>記入した内容を清書し、左右両方が入力されていることを確認して提出してください。</span>
+          </div>
+        )}
+
         {error && <div className="form-error" role="alert">{error}</div>}
 
         <div className="exam-actions">
-          {reviewMode ? (
-            <>
-              <button className="secondary-button" onClick={() => setReviewMode(false)}>動画とメモに戻る</button>
-              <button className="primary-button" onClick={continueToEmail}>内容を確定してメール試験へ <span>→</span></button>
-            </>
-          ) : (
-            <>
-              <span className="autosave-note">入力内容はこの端末に自動保存されます</span>
-              <button className="primary-button" onClick={beginReview}>動画確認を終えて清書する <span>→</span></button>
-            </>
-          )}
+          <span className="autosave-note">入力内容はこの端末に自動保存されます</span>
+          <button className="primary-button submit-button" type="button" onClick={submitVideoExam} disabled={!videoEnded || submitting}>
+            {submitting ? "回答を保存・採点しています…" : videoEnded ? "動画試験の回答を提出する" : "動画終了後に提出できます"}
+            {!submitting && videoEnded && <span>→</span>}
+          </button>
         </div>
       </main>
     </ExamShell>
