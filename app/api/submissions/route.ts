@@ -33,10 +33,16 @@ function parseFindings(value: unknown): VideoFinding[] {
     const entry = (item ?? {}) as Record<string, unknown>;
     return {
       id: stringValue(entry.id) || randomUUID(),
-      issue: stringValue(entry.issue),
-      recommendation: stringValue(entry.recommendation),
+      scene: stringValue(entry.scene),
+      judgment: stringValue(entry.judgment),
+      reason: stringValue(entry.reason),
     };
-  }).filter((item) => item.issue && item.recommendation);
+  }).filter((item) => item.scene || item.judgment || item.reason).map((item) => {
+    if (!item.scene || !item.reason || (item.judgment !== "○" && item.judgment !== "×")) {
+      throw new Error("記入した行はシーン・○×・理由／ポイントをすべて入力してください。");
+    }
+    return { ...item, judgment: item.judgment as "○" | "×" };
+  });
 }
 
 function parseReply(value: unknown): EmailReply {

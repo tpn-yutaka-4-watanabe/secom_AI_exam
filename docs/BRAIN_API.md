@@ -18,6 +18,10 @@ HTTP POSTで次のエンドポイントを呼び出します。
 
 このアプリの`BRAIN_API_ENDPOINT`は、Base URLと上記の完全なURLのどちらでも指定できます。
 
+参照元 `aicomm-testUI/server/src/services/brainApi.ts` の既定URLは `https://brain.metaclone.jp`、したがって送信先は `https://brain.metaclone.jp/api/v1/prediction` です。本番App Serviceの実際の設定は `BRAIN_API_ENDPOINT` を確認してください（環境変数による上書きが優先されます）。
+
+動画試験の新しい3項目形式に対応した設定案は [動画採点プロンプト](BRAIN_VIDEO_GRADING_PROMPT.md) を参照してください。動画用プロジェクトへの設定は別途必要です。
+
 ## 環境変数
 
 App Serviceの「設定」→「環境変数」に登録します。

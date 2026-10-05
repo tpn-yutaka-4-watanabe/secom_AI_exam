@@ -2,8 +2,11 @@ export type ExamType = "video" | "email";
 
 export type VideoFinding = {
   id: string;
-  issue: string;
-  recommendation: string;
+  scene: string;
+  judgment: "" | "○" | "×";
+  reason: string;
+  issue?: string;
+  recommendation?: string;
   time?: string;
   category?: string;
 };

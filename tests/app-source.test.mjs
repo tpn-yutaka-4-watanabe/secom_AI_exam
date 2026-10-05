@@ -41,11 +41,13 @@ test("video and email are submitted independently", async () => {
   assert.match(source, /record\.emailTest/);
 });
 
-test("video screen has six simple paired rows and locked playback", async () => {
+test("video screen has six assessment rows and locked playback", async () => {
   const source = await read("app/video-test/page.tsx");
   assert.match(source, /initialRowCount = 6/);
-  assert.match(source, /不適切だと考える箇所/);
-  assert.match(source, /あるべき対応/);
+  assert.match(source, /シーン/);
+  assert.match(source, /理由・ポイント/);
+  assert.match(source, /<option value="○">○/);
+  assert.match(source, /<option value="×">×/);
   assert.doesNotMatch(source, /映像時刻|分類|現在時刻|＋ 行を追加/);
   assert.doesNotMatch(source, /\scontrols(?:\s|>|=)/);
   assert.match(source, /onSeeking=\{preventManualSeeking\}/);

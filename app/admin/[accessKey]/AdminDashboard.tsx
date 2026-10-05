@@ -271,12 +271,12 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
 
               {selected.videoTest && (
                 <section className="result-section">
-                  <div className="section-title"><span>V</span><div><h3>動画確認試験</h3><p>{selected.videoTest.findings.length}件の指摘</p></div></div>
-                  <div className="admin-findings-table simplified">
-                    <div className="admin-table-head"><span>不適切だと考える箇所</span><span>あるべき対応</span></div>
+                  <div className="section-title"><span>V</span><div><h3>動画確認試験</h3><p>{selected.videoTest.findings.length}件の回答（旧形式は○×を「旧形式」と表示）</p></div></div>
+                  <div className="admin-findings-table scene-assessment">
+                    <div className="admin-table-head"><span>シーン</span><span>○／×</span><span>理由・ポイント</span></div>
                     {selected.videoTest.findings.map((finding) => (
                       <div className="admin-table-row" key={finding.id}>
-                        <p>{finding.issue}</p><p>{finding.recommendation}</p>
+                        <p>{finding.scene ?? finding.issue}</p><p>{finding.judgment ?? "旧形式"}</p><p>{finding.reason ?? finding.recommendation}</p>
                       </div>
                     ))}
                   </div>

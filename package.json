@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "node server.js",
     "start:next": "next start",
-    "test": "node --test tests/app-source.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "check": "npm run test && npm run build",
     "lint": "eslint app lib tests next.config.ts"
   },

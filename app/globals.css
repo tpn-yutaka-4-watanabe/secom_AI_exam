@@ -155,14 +155,15 @@ input::placeholder, textarea::placeholder { color: #aab1b9; }
 .video-hint span { margin-right: 12px; color: var(--red); font-weight: 800; }
 .finding-list { max-height: calc(100vh - 300px); min-height: 520px; padding: 15px; overflow: auto; display: grid; gap: 13px; align-content: start; }
 .finding-table-list { padding: 0 14px 18px; gap: 0; }
-.finding-column-head { min-width: 640px; padding: 12px 0 9px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: var(--navy); font-size: 11px; font-weight: 800; }
+.finding-column-head { min-width: 540px; padding: 12px 0 9px 40px; display: grid; grid-template-columns: minmax(100px, 1fr) 64px minmax(270px, 3fr); gap: 10px; color: var(--navy); font-size: 11px; font-weight: 800; }
 .finding-column-head span { padding-left: 3px; }
-.finding-row { min-width: 640px; padding: 10px 0; display: grid; grid-template-columns: 30px minmax(220px, 1fr) minmax(220px, 1fr); gap: 10px; align-items: stretch; border-top: 1px solid var(--soft-line); }
+.finding-row { min-width: 540px; padding: 10px 0; display: grid; grid-template-columns: 30px minmax(100px, 1fr) 64px minmax(270px, 3fr); gap: 10px; align-items: stretch; border-top: 1px solid var(--soft-line); }
+.finding-row select { width: 64px; min-height: 44px; padding: 8px; font-size: 18px; background: #fbfcfd; }
 .finding-row label { min-width: 0; }
 .finding-row label > span { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 .finding-row textarea { height: 112px; resize: vertical; background: #fbfcfd; }
 .finding-number { padding-top: 12px; color: #8d97a2; font-size: 10px; font-weight: 800; }
-.add-finding-button { width: 100%; min-width: 640px; min-height: 52px; margin-top: 8px; border: 1px dashed #aeb7c1; background: #f8f9fa; color: var(--navy); cursor: pointer; font-size: 11px; font-weight: 750; }
+.add-finding-button { width: 100%; min-width: 540px; min-height: 52px; margin-top: 8px; border: 1px dashed #aeb7c1; background: #f8f9fa; color: var(--navy); cursor: pointer; font-size: 11px; font-weight: 750; }
 .add-finding-button:hover { border-color: var(--navy); background: #f1f4f6; }
 .add-finding-button span { display: inline-grid; width: 26px; height: 26px; margin-right: 9px; place-items: center; border-radius: 50%; background: var(--navy); color: #fff; font-size: 18px; font-weight: 400; }
 .review-notice { margin-top: 18px; padding: 16px 18px; display: flex; align-items: center; gap: 16px; background: #eef8f4; border: 1px solid #c8e2d8; }
@@ -308,6 +309,8 @@ input::placeholder, textarea::placeholder { color: #aab1b9; }
 .admin-table-row p { margin: 0; }
 .admin-findings-table.simplified .admin-table-head,
 .admin-findings-table.simplified .admin-table-row { grid-template-columns: 1fr 1fr; }
+.admin-findings-table.scene-assessment .admin-table-head,
+.admin-findings-table.scene-assessment .admin-table-row { grid-template-columns: minmax(100px, 1fr) 64px minmax(240px, 3fr); }
 .admin-received-email { margin-bottom: 12px; padding: 11px 13px; border: 1px solid var(--line); background: #fbfcfd; color: #5d6976; font-size: 9px; }
 .admin-received-email summary { cursor: pointer; font-weight: 750; }
 .admin-received-email strong { display: block; margin: 12px 0 5px; color: var(--navy); }

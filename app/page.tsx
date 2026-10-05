@@ -23,7 +23,7 @@ export default function StartPage() {
               <span className="outline-number">01</span>
               <div>
                 <h3>動画確認試験</h3>
-                <p>管理者の一斉再生に合わせ、映像内の不適切な箇所とあるべき対応を記入します。</p>
+                <p>管理者の一斉再生に合わせ、シーンごとに○×と理由・ポイントを記入します。</p>
                 <code>/video-test</code>
               </div>
               <Link href="/video-test" className="primary-button">動画試験を開く <span>→</span></Link>

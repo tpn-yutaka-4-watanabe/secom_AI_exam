@@ -8,7 +8,7 @@ const examCopy: Record<ExamType, { number: string; title: string; description: s
   video: {
     number: "01",
     title: "動画確認試験",
-    description: "映像を確認し、不適切だと考える箇所と、あるべき対応を記入します。",
+    description: "映像を確認し、シーン・○×・理由／ポイントを記入します。良かった点は○、アドバイスが必要な点は×を選んでください。",
     notice: "受験情報を入力後、再生準備を行い、試験官の一斉再生を待ってください。",
   },
   email: {

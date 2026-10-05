@@ -18,16 +18,18 @@ const initialRowCount = 6;
 function createFinding(): VideoFinding {
   return {
     id: crypto.randomUUID(),
-    issue: "",
-    recommendation: "",
+    scene: "",
+    judgment: "",
+    reason: "",
   };
 }
 
 function withInitialRows(items: VideoFinding[]) {
-  const normalized = items.map((item) => ({
+  const normalized: VideoFinding[] = items.map((item) => ({
     id: item.id || crypto.randomUUID(),
-    issue: item.issue ?? "",
-    recommendation: item.recommendation ?? "",
+    scene: item.scene ?? item.issue ?? "",
+    judgment: item.judgment === "○" || item.judgment === "×" ? item.judgment : "",
+    reason: item.reason ?? item.recommendation ?? "",
   }));
   while (normalized.length < initialRowCount) normalized.push(createFinding());
   return normalized;
@@ -162,7 +164,7 @@ export default function VideoTestPage() {
     }
   }
 
-  function updateFinding(id: string, field: "issue" | "recommendation", value: string) {
+  function updateFinding<K extends "scene" | "judgment" | "reason">(id: string, field: K, value: VideoFinding[K]) {
     setFindings((current) => current.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   }
 
@@ -191,13 +193,13 @@ export default function VideoTestPage() {
       setError("動画が終了するまで提出できません。");
       return;
     }
-    const usedRows = findings.filter((item) => item.issue.trim() || item.recommendation.trim());
+    const usedRows = findings.filter((item) => item.scene.trim() || item.judgment || item.reason.trim());
     if (!usedRows.length) {
-      setError("少なくとも1件、不適切な箇所とあるべき対応を入力してください。");
+      setError("少なくとも1件、シーン・○×・理由／ポイントを入力してください。");
       return;
     }
-    if (usedRows.some((item) => !item.issue.trim() || !item.recommendation.trim())) {
-      setError("記入した欄は「不適切だと考える箇所」と「あるべき対応」の両方を入力してください。");
+    if (usedRows.some((item) => !item.scene.trim() || !item.judgment || !item.reason.trim())) {
+      setError("記入した行はシーン・○×・理由／ポイントをすべて入力してください。");
       return;
     }
 
@@ -214,8 +216,8 @@ export default function VideoTestPage() {
           startedAt: draft.startedAt,
           videoFindings: usedRows.map((item) => ({
             ...item,
-            issue: item.issue.trim(),
-            recommendation: item.recommendation.trim(),
+            scene: item.scene.trim(),
+            reason: item.reason.trim(),
           })),
         }),
       });
@@ -243,7 +245,7 @@ export default function VideoTestPage() {
   }
 
   const playbackStarted = Boolean(playback?.startedAt);
-  const filledCount = findings.filter((item) => item.issue.trim() || item.recommendation.trim()).length;
+  const filledCount = findings.filter((item) => item.scene.trim() || item.judgment || item.reason.trim()).length;
 
   return (
     <ExamShell step={2} examType="video">
@@ -252,7 +254,7 @@ export default function VideoTestPage() {
           <div>
             <div className="eyebrow">VIDEO OBSERVATION EXAM</div>
             <h1>{videoEnded ? "回答の清書・確認" : "動画確認試験"}</h1>
-            <p>{videoEnded ? "記入内容を読み直し、あるべき対応と対になっていることを確認してください。" : "試験官の一斉再生に合わせて映像を確認してください。"}</p>
+            <p>{videoEnded ? "シーン・○×・理由／ポイントを読み直して提出してください。" : "良かった点は○、アドバイスが必要な点は×を選び、理由やポイントを記入してください。"}</p>
           </div>
           <CandidateBadge number={draft.candidateNumber} name={draft.candidateName} />
         </div>
@@ -312,35 +314,44 @@ export default function VideoTestPage() {
           <section className="findings-panel simplified-findings">
             <div className="panel-heading">
               <div>
-                <span>指摘内容</span>
+                <span>シーンごとの評価</span>
                 <small>{filledCount}件記入中</small>
               </div>
-              <small>左右を一組として記入してください</small>
+              <small>○：良かった点 ／ ×：要アドバイス</small>
             </div>
 
             <div className="finding-list finding-table-list">
               <div className="finding-column-head" aria-hidden="true">
-                <span>不適切だと考える箇所</span>
-                <span>あるべき対応</span>
+                <span>シーン</span>
+                <span>○／×</span>
+                <span>理由・ポイント</span>
               </div>
               {findings.map((finding, index) => (
                 <article className="finding-row" key={finding.id}>
                   <span className="finding-number">{String(index + 1).padStart(2, "0")}</span>
                   <label>
-                    <span>不適切だと考える箇所 {index + 1}</span>
+                    <span>シーン {index + 1}</span>
                     <textarea
-                      value={finding.issue}
-                      onChange={(event) => updateFinding(finding.id, "issue", event.target.value)}
-                      placeholder="映像内で不適切だと考えた行動や状況を記入"
+                      value={finding.scene}
+                      onChange={(event) => updateFinding(finding.id, "scene", event.target.value)}
+                      placeholder="場面を短く記入"
                       rows={4}
                     />
                   </label>
                   <label>
-                    <span>あるべき対応 {index + 1}</span>
+                    <span>○／× {index + 1}</span>
+                    <select value={finding.judgment} onChange={(event) => updateFinding(finding.id, "judgment", event.target.value as VideoFinding["judgment"])}>
+                      <option value="">—</option>
+                      <option value="○">○</option>
+                      <option value="×">×</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>理由・ポイント {index + 1}</span>
                     <textarea
-                      value={finding.recommendation}
-                      onChange={(event) => updateFinding(finding.id, "recommendation", event.target.value)}
-                      placeholder="本来どのように対応すべきだったかを記入"
+                      value={finding.reason}
+                      onChange={(event) => updateFinding(finding.id, "reason", event.target.value)}
+                      placeholder="良かった理由、改善が必要な理由や指導のポイントを記入"
                       rows={4}
                     />
                   </label>
@@ -357,7 +368,7 @@ export default function VideoTestPage() {
         {videoEnded && (
           <div className="review-notice">
             <strong>映像が終了しました</strong>
-            <span>記入した内容を清書し、左右両方が入力されていることを確認して提出してください。</span>
+            <span>記入内容を清書し、各行のシーン・○×・理由／ポイントを確認して提出してください。</span>
           </div>
         )}
 
