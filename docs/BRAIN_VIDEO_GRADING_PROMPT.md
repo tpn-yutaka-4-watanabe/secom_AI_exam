@@ -95,4 +95,4 @@ status は通常 graded、人による確認が必要なら needs_review。
 - 同じ駐車車両を指摘して「減速する」とだけ記述：R03=1、一時停止要素は0。
 - B01だけ満たす：通常点0/15、bonus.matched=true、bonus_points=null、final_score=null、needs_review=true。
 
-アプリはBrainAPIのレスポンスを3回分そのまま保存・表示する。JSONスキーマの自動検証、3回の平均計算、合否判定は実装していない。
+アプリはBrainAPIのレスポンスを3回分保存し、項目点・配点・合計を検証する。通常点の最頻値（3回とも異なれば中央値）を採用し、採用点と一致する最初の回のコメントをExcelに出力する。加点候補は要確認扱い。平均点計算・合否判定は行わない。詳細は [現行運用仕様](RESULTS_AND_MAIL_GRADING.md) を参照。

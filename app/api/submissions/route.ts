@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { gradeSubmission } from "@/lib/brain-api";
 import { saveSubmission } from "@/lib/submission-store";
+import { getSubmittedScenario } from "@/lib/exam-settings-store";
+import { detectNgWords } from "@/lib/ng-words";
 import type {
   EmailReply,
   ExamType,
-  ReceivedEmail,
+  EmailScenario,
   SubmissionRecord,
   VideoFinding,
 } from "@/lib/types";
@@ -20,7 +22,7 @@ type ValidSubmission = {
   startedAt: string;
   videoFindings: VideoFinding[];
   emailReply: EmailReply | null;
-  receivedEmail: ReceivedEmail | null;
+  scenario: EmailScenario | null;
 };
 
 function stringValue(value: unknown) {
@@ -54,18 +56,7 @@ function parseReply(value: unknown): EmailReply {
   };
 }
 
-function parseReceivedEmail(value: unknown): ReceivedEmail {
-  const entry = (value ?? {}) as Record<string, unknown>;
-  return {
-    from: stringValue(entry.from),
-    to: stringValue(entry.to),
-    date: stringValue(entry.date),
-    subject: stringValue(entry.subject),
-    body: stringValue(entry.body),
-  };
-}
-
-function validatePayload(value: unknown): ValidSubmission {
+async function validatePayload(value: unknown): Promise<ValidSubmission> {
   const payload = (value ?? {}) as Record<string, unknown>;
   const examType = payload.examType === "video" || payload.examType === "email"
     ? payload.examType
@@ -87,18 +78,13 @@ function validatePayload(value: unknown): ValidSubmission {
       startedAt,
       videoFindings,
       emailReply: null,
-      receivedEmail: null,
+      scenario: null,
     };
   }
 
   const emailReply = parseReply(payload.emailReply);
-  const receivedEmail = parseReceivedEmail(payload.receivedEmail);
-  if (!emailReply.to || !emailReply.subject || !emailReply.body) {
-    throw new Error("メール返信をすべて入力してください。");
-  }
-  if (Object.values(receivedEmail).some((field) => !field)) {
-    throw new Error("受信メールの内容を確認できません。画面を再読み込みしてください。");
-  }
+  if (!emailReply.body || emailReply.body.length > 20000) throw new Error("本文は1～20,000文字で入力してください。");
+  const scenario = await getSubmittedScenario(stringValue(payload.scenarioId), stringValue(payload.scenarioVersion));
   return {
     examType,
     candidateNumber,
@@ -106,13 +92,13 @@ function validatePayload(value: unknown): ValidSubmission {
     startedAt,
     videoFindings: [],
     emailReply,
-    receivedEmail,
+    scenario,
   };
 }
 
 export async function POST(request: Request) {
   try {
-    const input = validatePayload(await request.json());
+    const input = await validatePayload(await request.json());
     const submittedAt = new Date().toISOString();
     const record: SubmissionRecord = {
       id: randomUUID(),
@@ -126,10 +112,10 @@ export async function POST(request: Request) {
     };
 
     if (input.examType === "video") {
-      record.videoTest = { videoFile: "training-video.mp4", findings: input.videoFindings };
+      record.videoTest = { findings: input.videoFindings };
       record.grading.video = { status: "error", attempts: [] };
     } else {
-      record.emailTest = { receivedEmail: input.receivedEmail!, reply: input.emailReply! };
+      record.emailTest = { scenario: input.scenario!, reply: input.emailReply!, ngHits: detectNgWords(input.emailReply!.body) };
       record.grading.email = { status: "error", attempts: [] };
     }
 

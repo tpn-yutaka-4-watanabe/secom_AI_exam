@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
+import { loadTs } from "./load-ts.mjs";
 
 test("video grading sends scene, judgment and reason to the video project three times", async () => {
-  const source = await readFile(new URL("../lib/brain-api.ts", import.meta.url), "utf8");
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-  const { gradeSubmission } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+  const { gradeSubmission } = await loadTs("lib/brain-api.ts");
+  const evaluation = { rubric_version: "g4-driving-202611-v1", base_score: 0, base_max_score: 15, criteria: [1,1,2,1,2,1,2,2,2,1].map((max, i) => ({ criterion_id: `R${String(i+1).padStart(2,"0")}`, max_score: max, score: 0, comment: "該当なし" })), summary: "テスト" };
   const keys = ["BRAIN_API_ENDPOINT", "BRAIN_API_KEY", "BRAIN_API_PROJECT_ID_DRIVE", "BRAIN_API_PROJECT_ID_MAIL"];
   const previous = keys.map((key) => process.env[key]);
   const originalFetch = globalThis.fetch;
@@ -18,7 +16,7 @@ test("video grading sends scene, judgment and reason to the video project three 
     process.env.BRAIN_API_PROJECT_ID_MAIL = "mail-project";
     globalThis.fetch = async (url, init) => {
       calls.push({ url, body: JSON.parse(init.body) });
-      return new Response(JSON.stringify({ message: '{"base_score":2,"base_max_score":15}' }));
+      return new Response(JSON.stringify({ message: JSON.stringify(evaluation) }));
     };
     const finding = { id: "row-1", scene: "歩道を横断", judgment: "×", reason: "歩道の直前で一時停止する" };
     const result = await gradeSubmission({ id: "test", candidateNumber: "TEST", candidateName: "テスト", videoTest: { findings: [finding] } });
@@ -32,7 +30,8 @@ test("video grading sends scene, judgment and reason to the video project three 
       assert.match(call.body.utterance, /g4-driving-202611-v1/);
       assert.ok(call.body.utterance.includes(JSON.stringify([finding], null, 2)));
     }
-    assert.deepEqual(result.video.attempts[0].response, { message: '{"base_score":2,"base_max_score":15}' });
+    assert.deepEqual(result.video.attempts[0].response, { message: JSON.stringify(evaluation) });
+    assert.equal(result.video.summary.score, 0);
   } finally {
     globalThis.fetch = originalFetch;
     keys.forEach((key, index) => {

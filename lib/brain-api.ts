@@ -1,4 +1,6 @@
 import type { BrainAttempt, GradingResult, SubmissionRecord } from "./types";
+import { mailGradingPrompt } from "./mail-grading";
+import { parseEvaluation, summarizeAttempts } from "./grading-results";
 
 const brainPath = "/api/v1/prediction";
 
@@ -58,6 +60,8 @@ async function runAttempt(
   examType: ExamType,
 ): Promise<BrainAttempt> {
   const startedAt = new Date().toISOString();
+  let httpStatus: number | undefined;
+  let raw: unknown;
   try {
     const { endpoint, apiKey, projectId } = brainConfiguration(examType);
     const response = await fetch(endpoint, {
@@ -75,7 +79,8 @@ async function runAttempt(
       signal: AbortSignal.timeout(60_000),
       cache: "no-store",
     });
-    const raw = await parseResponse(response);
+    httpStatus = response.status;
+    raw = await parseResponse(response);
     if (!response.ok) {
       throw new Error(extractMessage(raw) || `BrainAPI request failed (HTTP ${response.status})`);
     }
@@ -86,6 +91,7 @@ async function runAttempt(
       completedAt: new Date().toISOString(),
       message: extractMessage(raw),
       response: raw,
+      httpStatus,
     };
   } catch (error) {
     return {
@@ -94,6 +100,8 @@ async function runAttempt(
       startedAt,
       completedAt: new Date().toISOString(),
       error: error instanceof Error ? error.message : "BrainAPIへの接続に失敗しました。",
+      httpStatus,
+      response: raw,
     };
   }
 }
@@ -102,14 +110,21 @@ async function gradeThreeTimes(
   prompt: string,
   uidPrefix: string,
   examType: ExamType,
+  record: SubmissionRecord,
 ): Promise<GradingResult> {
   const attempts: BrainAttempt[] = [];
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    attempts.push(await runAttempt(prompt, `${uidPrefix}-${attempt}`, attempt, examType));
+    const result = await runAttempt(prompt, `${uidPrefix}-${attempt}`, attempt, examType);
+    if (result.status === "success") {
+      try { result.evaluation = parseEvaluation(result.response, examType, record); }
+      catch (e) { result.validationError = e instanceof Error ? e.message : "採点結果の形式が不正です。"; }
+    }
+    attempts.push(result);
   }
   return {
-    status: attempts.every((attempt) => attempt.status === "success") ? "completed" : "error",
+    status: attempts.every((attempt) => attempt.status === "success" && attempt.evaluation) ? "completed" : "error",
     attempts,
+    summary: summarizeAttempts(attempts),
   };
 }
 
@@ -128,6 +143,7 @@ function videoPrompt(record: SubmissionRecord) {
 }
 
 function emailPrompt(record: SubmissionRecord) {
+  if (record.emailTest?.scenario) return mailGradingPrompt(record.emailTest.scenario, record.emailTest.reply.body, record.emailTest.ngHits || []);
   return [
     "グレード4認定試験のメール対応試験を採点してください。",
     "警備会社の営業担当者として、顧客企業の社長から届いた相談メールへの返信を評価します。",
@@ -145,10 +161,10 @@ function emailPrompt(record: SubmissionRecord) {
 export async function gradeSubmission(record: SubmissionRecord) {
   const [video, email] = await Promise.all([
     record.videoTest
-      ? gradeThreeTimes(videoPrompt(record), `${record.id}-video`, "video")
+      ? gradeThreeTimes(videoPrompt(record), `${record.id}-video`, "video", record)
       : Promise.resolve(undefined),
     record.emailTest
-      ? gradeThreeTimes(emailPrompt(record), `${record.id}-email`, "email")
+      ? gradeThreeTimes(emailPrompt(record), `${record.id}-email`, "email", record)
       : Promise.resolve(undefined),
   ]);
   return { video, email };

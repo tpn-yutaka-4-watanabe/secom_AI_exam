@@ -23,7 +23,7 @@ export default function StartPage() {
               <span className="outline-number">01</span>
               <div>
                 <h3>動画確認試験</h3>
-                <p>管理者の一斉再生に合わせ、シーンごとに○×と理由・ポイントを記入します。</p>
+                <p>試験官が上映する映像を見て、シーンごとに○×と理由・ポイントを記入します。</p>
                 <code>/video-test</code>
               </div>
               <Link href="/video-test" className="primary-button">動画試験を開く <span>→</span></Link>
@@ -33,7 +33,7 @@ export default function StartPage() {
               <span className="outline-number">02</span>
               <div>
                 <h3>メール対応試験</h3>
-                <p>顧客からの受信メールを読み、営業担当者として返信を作成します。</p>
+                <p>状況説明を読み、お客様への一次回答メールの本文を作成します。</p>
                 <code>/email-test</code>
               </div>
               <Link href="/email-test" className="primary-button">メール試験を開く <span>→</span></Link>

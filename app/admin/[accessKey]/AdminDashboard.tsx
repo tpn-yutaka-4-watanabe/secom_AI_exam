@@ -3,11 +3,25 @@
 import { FormEvent, useMemo, useState } from "react";
 import type {
   BrainAttempt,
-  EmailExamContent,
+  EmailScenario,
+  GradingResult,
   ExamType,
   SubmissionRecord,
-  VideoPlaybackState,
 } from "@/lib/types";
+
+function GradeSummary({ result }: { result?: GradingResult }) {
+  const s = result?.summary;
+  const selected = result?.attempts.find(a => a.attempt === s?.selectedAttempt)?.evaluation;
+  return <div className="grading-summary">
+    <h3>採用点：{s?.score ?? "未確定"} {selected ? `/ ${selected.maxScore}` : ""}</h3>
+    <p>3回の得点：{s?.scores.map(v => v ?? "未取得").join(" / ") || "未取得"}　／　{s?.method === "mode" ? "最頻値" : s?.method === "median" ? "中央値" : "3回分の正常な採点が必要です"}</p>
+    {s?.needsReview && <p className="attempt-error">要確認：得点は暫定です。接続・形式・採点内容を確認してください。</p>}
+    {selected && <><p>共有する評価：採点{s?.selectedAttempt}回目</p><p>{selected.summary}</p>
+      <table className="score-table"><thead><tr><th>評価項目</th><th>点数</th><th>評価</th></tr></thead><tbody>{selected.criteria.map(c => <tr key={c.id}><td>{c.name}</td><td>{c.score} / {c.maxScore}</td><td>{c.comment}</td></tr>)}</tbody></table>
+      {selected.deductions.map((d, i) => <p key={i}>減点 {d.points}点：{d.comment} {d.evidence}</p>)}
+    </>}
+  </div>;
+}
 
 function BrainAttempts({ attempts = [] }: { attempts?: BrainAttempt[] }) {
   return (
@@ -18,9 +32,11 @@ function BrainAttempts({ attempts = [] }: { attempts?: BrainAttempt[] }) {
             <strong>採点 {attempt.attempt}回目</strong>
             <span>{attempt.status === "success" ? "完了" : "エラー"}</span>
           </div>
+          {attempt.httpStatus && <small>HTTP {attempt.httpStatus}</small>}
           {attempt.status === "success" ? (
             <>
-              <p>{attempt.message || "応答本文なし"}</p>
+              <p>{attempt.evaluation ? `${attempt.evaluation.score} / ${attempt.evaluation.maxScore}点` : attempt.validationError || "点数を確認できません。"}</p>
+              <details><summary>この回の評価</summary><pre>{attempt.message || "応答本文なし"}</pre></details>
               <details><summary>生レスポンス</summary><pre>{JSON.stringify(attempt.response, null, 2)}</pre></details>
             </>
           ) : (
@@ -50,13 +66,13 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [submissions, setSubmissions] = useState<SubmissionRecord[]>([]);
-  const [receivedEmail, setReceivedEmail] = useState<EmailExamContent | null>(null);
-  const [videoPlayback, setVideoPlayback] = useState<VideoPlaybackState | null>(null);
+  const [scenario, setScenario] = useState<EmailScenario | null>(null);
+  const [options, setOptions] = useState<EmailScenario[]>([]);
+  const [exporting, setExporting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
-  const [controllingVideo, setControllingVideo] = useState(false);
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
 
@@ -67,7 +83,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
       `${item.candidateNumber} ${item.candidateName} ${item.id} ${examTypeLabel(item)}`.toLowerCase().includes(needle),
     );
   }, [query, submissions]);
-  const selected = submissions.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
+  const selected = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
 
   function adminHeaders(contentType = false) {
     return {
@@ -77,8 +93,8 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
     };
   }
 
-  async function signIn(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function signIn(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
     setLoading(true);
     setError("");
     try {
@@ -88,16 +104,16 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
       ]);
       const submissionsPayload = (await submissionsResponse.json()) as { submissions?: SubmissionRecord[]; error?: string };
       const settingsPayload = (await settingsResponse.json()) as {
-        receivedEmail?: EmailExamContent;
-        videoPlayback?: VideoPlaybackState;
+        scenario?: EmailScenario;
+        options?: EmailScenario[];
         error?: string;
       };
       if (!submissionsResponse.ok) throw new Error(submissionsPayload.error || "管理画面を開けませんでした。");
       if (!settingsResponse.ok) throw new Error(settingsPayload.error || "試験設定を読み込めませんでした。");
       setSubmissions(submissionsPayload.submissions ?? []);
       setSelectedId(submissionsPayload.submissions?.[0]?.id ?? null);
-      setReceivedEmail(settingsPayload.receivedEmail ?? null);
-      setVideoPlayback(settingsPayload.videoPlayback ?? null);
+      setScenario(settingsPayload.scenario ?? null);
+      setOptions(settingsPayload.options ?? []);
       setAuthenticated(true);
     } catch (signInError) {
       setError(signInError instanceof Error ? signInError.message : "管理者認証に失敗しました。");
@@ -108,7 +124,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
 
   async function saveEmailProblem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!receivedEmail || savingEmail) return;
+    if (!scenario || savingEmail) return;
     setSavingEmail(true);
     setError("");
     setSettingsMessage("");
@@ -116,11 +132,11 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
       const response = await fetch("/api/admin/exam-settings", {
         method: "PUT",
         headers: adminHeaders(true),
-        body: JSON.stringify({ receivedEmail }),
+        body: JSON.stringify({ scenario }),
       });
-      const payload = (await response.json()) as { receivedEmail?: EmailExamContent; error?: string };
-      if (!response.ok || !payload.receivedEmail) throw new Error(payload.error || "メール問題を保存できませんでした。");
-      setReceivedEmail(payload.receivedEmail);
+      const payload = (await response.json()) as { scenario?: EmailScenario; error?: string };
+      if (!response.ok || !payload.scenario) throw new Error(payload.error || "メール問題を保存できませんでした。");
+      setScenario(payload.scenario);
       setSettingsMessage("メール問題を保存しました。次に開始する受験から反映されます。");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "メール問題を保存できませんでした。");
@@ -129,29 +145,18 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
     }
   }
 
-  async function changeVideoPlayback(action: "start" | "reset") {
-    const confirmation = action === "start"
-      ? "受験者全員の動画を一斉再生します。開始してよろしいですか？"
-      : "動画を待機状態に戻します。次の試験準備として実行してよろしいですか？";
-    if (!window.confirm(confirmation)) return;
-    setControllingVideo(true);
-    setError("");
-    setSettingsMessage("");
+  async function downloadExcel() {
+    setExporting(true); setError("");
     try {
-      const response = await fetch("/api/admin/exam-settings", {
-        method: "PATCH",
-        headers: adminHeaders(true),
-        body: JSON.stringify({ action }),
-      });
-      const payload = (await response.json()) as { videoPlayback?: VideoPlaybackState; error?: string };
-      if (!response.ok || !payload.videoPlayback) throw new Error(payload.error || "動画状態を変更できませんでした。");
-      setVideoPlayback(payload.videoPlayback);
-      setSettingsMessage(action === "start" ? "一斉再生を開始しました。" : "動画を待機状態へ戻しました。");
-    } catch (controlError) {
-      setError(controlError instanceof Error ? controlError.message : "動画状態を変更できませんでした。");
-    } finally {
-      setControllingVideo(false);
-    }
+      const response = await fetch("/api/admin/export", { method: "POST", headers: adminHeaders(true),
+        body: JSON.stringify({ ids: filtered.map(record => record.id) }) });
+      if (!response.ok) throw new Error("Excel出力に失敗しました。");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = "grade4-results.xlsx";
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setError(e instanceof Error ? e.message : "Excel出力に失敗しました。"); }
+    finally { setExporting(false); }
   }
 
   if (!authenticated) {
@@ -161,7 +166,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
           <div className="admin-brand"><span>G4</span><strong>試験管理</strong></div>
           <div className="eyebrow">ADMINISTRATION</div>
           <h1>管理者ログイン</h1>
-          <p>グレード4認定試験の問題設定、動画制御、回答・採点結果を管理します。</p>
+          <p>グレード4認定試験の問題設定、回答・採点結果を管理します。</p>
           <form onSubmit={signIn}>
             <label><span>管理者パスワード</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoFocus required /></label>
             {error && <div className="form-error">{error}</div>}
@@ -174,62 +179,33 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
 
   const completed = submissions.filter((item) => item.overallStatus === "completed").length;
   const errors = submissions.length - completed;
-  const playbackActive = Boolean(videoPlayback?.startedAt);
 
   return (
     <main className="admin-page">
       <header className="admin-header">
         <div className="admin-brand"><span>G4</span><strong>グレード4認定試験 <small>管理画面</small></strong></div>
-        <button className="secondary-button small" onClick={() => setAuthenticated(false)}>ログアウト</button>
+        <div className="admin-tool-actions"><button className="secondary-button small" onClick={() => void signIn()} disabled={loading}>結果を更新</button><button className="primary-button small" onClick={downloadExcel} disabled={exporting || !filtered.length}>{exporting ? "出力中…" : `表示中の${filtered.length}件をExcel出力`}</button><button className="secondary-button small" onClick={() => setAuthenticated(false)}>ログアウト</button></div>
       </header>
 
       <section className="admin-summary">
         <div><span>提出件数</span><strong>{submissions.length}</strong><small>件</small></div>
         <div><span>採点完了</span><strong>{completed}</strong><small>件</small></div>
-        <div><span>接続エラー</span><strong>{errors}</strong><small>件</small></div>
+        <div><span>採点未完了</span><strong>{errors}</strong><small>件</small></div>
       </section>
 
       <section className="admin-exam-tools">
-        <article className="video-control-card">
-          <div className="admin-tool-heading">
-            <div><span className="eyebrow">VIDEO CONTROL</span><h2>動画試験・一斉再生</h2></div>
-            <span className={`control-status ${playbackActive ? "playing" : "waiting"}`}>
-              {playbackActive ? "再生中" : "待機中"}
-            </span>
-          </div>
-          <p>受験者全員が「再生準備を完了する」を押したことを確認してから開始してください。</p>
-          {videoPlayback?.startedAt && <time>開始日時：{new Date(videoPlayback.startedAt).toLocaleString("ja-JP")}</time>}
-          <div className="admin-tool-actions">
-            <button className="primary-button" type="button" onClick={() => changeVideoPlayback("start")} disabled={controllingVideo || playbackActive}>
-              全受験者の動画を一斉再生
-            </button>
-            <button className="secondary-button" type="button" onClick={() => changeVideoPlayback("reset")} disabled={controllingVideo}>
-              次回試験の待機状態へ戻す
-            </button>
-          </div>
-        </article>
-
         <article className="email-settings-card">
-          <details>
-            <summary>
-              <span><span className="eyebrow">EMAIL QUESTION</span><strong>メール試験・受信内容を編集</strong></span>
-              <small>本番問題への切り替え</small>
-            </summary>
-            {receivedEmail && (
-              <form className="email-settings-form" onSubmit={saveEmailProblem}>
-                <div className="email-settings-grid">
-                  <label><span>差出人</span><input value={receivedEmail.from} onChange={(event) => setReceivedEmail({ ...receivedEmail, from: event.target.value })} required /></label>
-                  <label><span>宛先</span><input value={receivedEmail.to} onChange={(event) => setReceivedEmail({ ...receivedEmail, to: event.target.value })} required /></label>
-                  <label><span>日時</span><input value={receivedEmail.date} onChange={(event) => setReceivedEmail({ ...receivedEmail, date: event.target.value })} required /></label>
-                  <label><span>件名</span><input value={receivedEmail.subject} onChange={(event) => setReceivedEmail({ ...receivedEmail, subject: event.target.value })} required /></label>
-                </div>
-                <label className="email-question-body"><span>本文</span><textarea rows={14} value={receivedEmail.body} onChange={(event) => setReceivedEmail({ ...receivedEmail, body: event.target.value })} required /></label>
-                <div className="admin-tool-actions">
-                  <span>保存後に開始した受験者から新しい内容が表示されます。</span>
-                  <button className="primary-button" type="submit" disabled={savingEmail}>{savingEmail ? "保存しています…" : "メール問題を保存"}</button>
-                </div>
-              </form>
-            )}
+          <details><summary><span><span className="eyebrow">EMAIL QUESTION</span><strong>メール試験・状況説明を編集</strong></span><small>2-1 / 2-2（2-3は個別対応のため保留）</small></summary>
+          {scenario && <form className="email-settings-form" onSubmit={saveEmailProblem}>
+            <label><span>対象問題</span><select value={scenario.id} onChange={e => { const preset = options.find(p => p.id === e.target.value); if (preset) setScenario({ ...preset }); }}>
+              {options.map(p => <option key={p.id} value={p.id} disabled={!p.enabled}>{p.id}：{p.title}{p.enabled ? "" : "（保留）"}</option>)}
+            </select></label>
+            <label><span>問題名</span><input value={scenario.title} onChange={e => setScenario({ ...scenario, title: e.target.value })} required /></label>
+            <label><span>状況説明</span><textarea rows={12} value={scenario.situation} onChange={e => setScenario({ ...scenario, situation: e.target.value })} required /></label>
+            <label><span>お客様のご指摘・要請</span><textarea rows={10} value={scenario.request} onChange={e => setScenario({ ...scenario, request: e.target.value })} required /></label>
+            <p>保存後に開始する受験から反映します。採点基準を変えるほど問題を変更する場合は、基準も別途更新してください。</p>
+            <button className="primary-button" disabled={savingEmail}>{savingEmail ? "保存中…" : "メール問題を保存"}</button>
+          </form>}
           </details>
         </article>
       </section>
@@ -280,23 +256,25 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
                       </div>
                     ))}
                   </div>
+                  <GradeSummary result={selected.grading.video} />
                   <BrainAttempts attempts={selected.grading.video?.attempts} />
                 </section>
               )}
 
               {selected.emailTest && (
                 <section className="result-section">
-                  <div className="section-title"><span>M</span><div><h3>メール対応試験</h3><p>顧客への返信内容</p></div></div>
+                  <div className="section-title"><span>M</span><div><h3>メール対応試験</h3><p>作成したメール本文</p></div></div>
                   <details className="admin-received-email">
-                    <summary>出題した受信メールを確認</summary>
-                    <strong>{selected.emailTest.receivedEmail.subject}</strong>
-                    <pre>{selected.emailTest.receivedEmail.body}</pre>
+                    <summary>出題した状況を確認</summary>
+                    <strong>{selected.emailTest.scenario?.title ?? selected.emailTest.receivedEmail?.subject}</strong>
+                    <pre>{selected.emailTest.scenario ? `${selected.emailTest.scenario.situation}\n\n${selected.emailTest.scenario.request}` : selected.emailTest.receivedEmail?.body}</pre>
                   </details>
                   <div className="admin-mail-answer">
-                    <div><span>宛先</span><strong>{selected.emailTest.reply.to}</strong></div>
-                    <div><span>件名</span><strong>{selected.emailTest.reply.subject}</strong></div>
+                    {selected.emailTest.reply.to && <div><span>宛先</span><strong>{selected.emailTest.reply.to}</strong></div>}
+                    {selected.emailTest.reply.subject && <div><span>件名</span><strong>{selected.emailTest.reply.subject}</strong></div>}
                     <pre>{selected.emailTest.reply.body}</pre>
                   </div>
+                  <GradeSummary result={selected.grading.email} />
                   <BrainAttempts attempts={selected.grading.email?.attempts} />
                 </section>
               )}

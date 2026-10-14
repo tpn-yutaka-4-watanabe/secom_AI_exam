@@ -38,7 +38,7 @@ export default function CompletePage() {
               {receipt.overallStatus === "completed" ? (
                 <strong className="status-success">BrainAPI採点完了</strong>
               ) : (
-                <strong className="status-warning">回答保存済み・BrainAPI接続エラー記録済み</strong>
+                <strong className="status-warning">回答保存済み・採点結果は管理者が確認します</strong>
               )}
             </div>
           </section>

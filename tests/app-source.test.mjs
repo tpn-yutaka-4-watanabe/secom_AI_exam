@@ -29,8 +29,8 @@ test("each exam uses its own BrainAPI project", async () => {
   const source = await read("lib/brain-api.ts");
   assert.match(source, /BRAIN_API_PROJECT_ID_DRIVE/);
   assert.match(source, /BRAIN_API_PROJECT_ID_MAIL/);
-  assert.match(source, /gradeThreeTimes\(videoPrompt\(record\), `\$\{record\.id\}-video`, "video"\)/);
-  assert.match(source, /gradeThreeTimes\(emailPrompt\(record\), `\$\{record\.id\}-email`, "email"\)/);
+  assert.match(source, /gradeThreeTimes\(videoPrompt\(record\), `\$\{record\.id\}-video`, "video", record\)/);
+  assert.match(source, /gradeThreeTimes\(emailPrompt\(record\), `\$\{record\.id\}-email`, "email", record\)/);
 });
 
 test("video and email are submitted independently", async () => {
@@ -41,7 +41,7 @@ test("video and email are submitted independently", async () => {
   assert.match(source, /record\.emailTest/);
 });
 
-test("video screen has six assessment rows and locked playback", async () => {
+test("video screen has six assessment rows and no embedded playback", async () => {
   const source = await read("app/video-test/page.tsx");
   assert.match(source, /initialRowCount = 6/);
   assert.match(source, /シーン/);
@@ -50,16 +50,24 @@ test("video screen has six assessment rows and locked playback", async () => {
   assert.match(source, /<option value="×">×/);
   assert.doesNotMatch(source, /映像時刻|分類|現在時刻|＋ 行を追加/);
   assert.doesNotMatch(source, /\scontrols(?:\s|>|=)/);
-  assert.match(source, /onSeeking=\{preventManualSeeking\}/);
-  assert.match(source, /\/api\/video-playback/);
+  assert.doesNotMatch(source, /<video|\/api\/video-playback|videoEnded/);
 });
 
-test("administrator can edit email content and control video playback", async () => {
+test("administrator can edit scenarios and export results without video controls", async () => {
   const dashboard = await read("app/admin/[accessKey]/AdminDashboard.tsx");
   const route = await read("app/api/admin/exam-settings/route.ts");
-  assert.match(dashboard, /メール試験・受信内容を編集/);
-  assert.match(dashboard, /全受験者の動画を一斉再生/);
+  assert.match(dashboard, /メール試験・状況説明を編集/);
+  assert.match(dashboard, /\/api\/admin\/export/);
   assert.match(route, /saveEmailExamContent/);
-  assert.match(route, /startVideoPlayback/);
-  assert.match(route, /resetVideoPlayback/);
+  assert.doesNotMatch(route, /startVideoPlayback|resetVideoPlayback/);
+});
+
+test("both exams always start with empty identity and do not restore drafts", async () => {
+  for (const path of ["app/video-test/page.tsx", "app/email-test/page.tsx"]) {
+    const source = await read(path);
+    assert.match(source, /useState<ExamDraft \| null>\(null\)/);
+    assert.doesNotMatch(source, /loadExamDraft|localStorage|sessionStorage/);
+    assert.match(source, /event.persisted/);
+  }
+  assert.match(await read("app/components/ExamStartForm.tsx"), /例：99/);
 });

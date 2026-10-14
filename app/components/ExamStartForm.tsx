@@ -9,13 +9,13 @@ const examCopy: Record<ExamType, { number: string; title: string; description: s
     number: "01",
     title: "動画確認試験",
     description: "映像を確認し、シーン・○×・理由／ポイントを記入します。良かった点は○、アドバイスが必要な点は×を選んでください。",
-    notice: "受験情報を入力後、再生準備を行い、試験官の一斉再生を待ってください。",
+    notice: "映像は試験官が別途上映します。この画面では回答を記入します。",
   },
   email: {
     number: "02",
     title: "メール対応試験",
-    description: "顧客から届いた警備に関する質問メールへの返信を作成します。",
-    notice: "受信メールの内容を確認し、営業担当者として返信を作成してください。",
+    description: "状況説明に基づき、お客様への一次回答メールの本文を作成します。",
+    notice: "宛名・挨拶・署名も含めて本文を作成してください。",
   },
 };
 
@@ -54,7 +54,7 @@ export function ExamStartForm({ examType, onStarted }: { examType: ExamType; onS
             <input
               value={candidateNumber}
               onChange={(event) => setCandidateNumber(event.target.value)}
-              placeholder="例：G4-001"
+              placeholder="例：99"
               autoComplete="off"
               required
             />
@@ -65,7 +65,7 @@ export function ExamStartForm({ examType, onStarted }: { examType: ExamType; onS
               value={candidateName}
               onChange={(event) => setCandidateName(event.target.value)}
               placeholder="例：山田 太郎"
-              autoComplete="name"
+              autoComplete="off"
               required
             />
           </label>

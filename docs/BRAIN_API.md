@@ -1,5 +1,7 @@
 # BrainAPI接続仕様
 
+2026-10-14のメール問題・NG判定・採点集計・Excel出力については [現行の運用・採点仕様](RESULTS_AND_MAIL_GRADING.md) を参照してください。メール採点の詳細指示はアプリから毎回送信します。
+
 この説明は、`C:\Users\K24040482\Documents\aicomm-testUI`にある既存実装のうち、次のファイルを確認して整理したものです。
 
 - `server/src/services/brainApi.ts`

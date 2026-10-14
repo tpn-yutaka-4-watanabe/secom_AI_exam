@@ -2,12 +2,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BlobServiceClient, type ContainerClient } from "@azure/storage-blob";
-import { receivedEmail as defaultReceivedEmail } from "./exam-content";
-import type { EmailExamContent, ReceivedEmail, VideoPlaybackState } from "./types";
+import reference from "./mail-reference.json";
+import type { EmailScenario } from "./types";
 
 const containerName = process.env.AZURE_STORAGE_CONTAINER?.trim() || "exam-data";
-const emailBlobName = "settings/email-exam.json";
-const playbackBlobName = "settings/video-playback.json";
+const emailBlobName = "settings/email-scenario.json";
 let containerPromise: Promise<ContainerClient> | null = null;
 
 function connectionString() {
@@ -63,59 +62,25 @@ async function writeJson(blobName: string, localFileName: string, value: unknown
   await fs.writeFile(target, content, "utf8");
 }
 
-function cleanReceivedEmail(value: ReceivedEmail): ReceivedEmail {
-  return {
-    from: value.from.trim(),
-    to: value.to.trim(),
-    date: value.date.trim(),
-    subject: value.subject.trim(),
-    body: value.body.trim(),
-  };
+export function emailScenarioOptions() { return reference.scenarios; }
+export async function getEmailExamContent(): Promise<EmailScenario> {
+  return (await readJson<EmailScenario>(emailBlobName, "email-scenario.json")) ?? reference.scenarios[0];
 }
-
-export async function getEmailExamContent(): Promise<EmailExamContent> {
-  return (await readJson<EmailExamContent>(emailBlobName, "email-exam.json")) ?? defaultReceivedEmail;
-}
-
-export async function saveEmailExamContent(value: ReceivedEmail): Promise<EmailExamContent> {
-  const content = { ...cleanReceivedEmail(value), updatedAt: new Date().toISOString() };
-  await writeJson(emailBlobName, "email-exam.json", content);
+export async function saveEmailExamContent(value: EmailScenario): Promise<EmailScenario> {
+  const preset = reference.scenarios.find(item => item.id === value.id && item.enabled);
+  if (!preset) throw new Error("この問題は採点基準の確認待ち、または存在しません。");
+  if (![value.title, value.situation, value.request].every(v => typeof v === "string" && v.trim())) throw new Error("問題文をすべて入力してください。");
+  const content = { ...preset, title: value.title.trim(), situation: value.situation.trim(), request: value.request.trim(), version: randomUUID() };
+  await writeJson(`settings/scenarios/${content.version}.json`, `scenario-${content.version}.json`, content);
+  await writeJson(emailBlobName, "email-scenario.json", content);
   return content;
 }
-
-function waitingPlaybackState(): VideoPlaybackState {
-  return { runId: randomUUID(), startedAt: null, updatedAt: new Date().toISOString() };
-}
-
-let playbackCache: { value: VideoPlaybackState; loadedAt: number } | null = null;
-let playbackLoadPromise: Promise<VideoPlaybackState> | null = null;
-
-export async function getVideoPlaybackState(): Promise<VideoPlaybackState> {
-  if (playbackCache && Date.now() - playbackCache.loadedAt < 750) return playbackCache.value;
-  if (!playbackLoadPromise) {
-    playbackLoadPromise = (async () => {
-      const value = (await readJson<VideoPlaybackState>(playbackBlobName, "video-playback.json")) ?? waitingPlaybackState();
-      playbackCache = { value, loadedAt: Date.now() };
-      return value;
-    })();
-  }
-  try {
-    return await playbackLoadPromise;
-  } finally {
-    playbackLoadPromise = null;
-  }
-}
-
-export async function startVideoPlayback(): Promise<VideoPlaybackState> {
-  const value = { runId: randomUUID(), startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  await writeJson(playbackBlobName, "video-playback.json", value);
-  playbackCache = { value, loadedAt: Date.now() };
-  return value;
-}
-
-export async function resetVideoPlayback(): Promise<VideoPlaybackState> {
-  const value = waitingPlaybackState();
-  await writeJson(playbackBlobName, "video-playback.json", value);
-  playbackCache = { value, loadedAt: Date.now() };
+export async function getSubmittedScenario(id: string, version: string): Promise<EmailScenario> {
+  const preset = reference.scenarios.find(s => s.id === id && s.enabled);
+  if (!preset) throw new Error("この問題は利用できません。");
+  if (version === preset.version) return preset;
+  if (!/^[a-f0-9-]{36}$/.test(version)) throw new Error("問題のバージョンが正しくありません。");
+  const value = await readJson<EmailScenario>(`settings/scenarios/${version}.json`, `scenario-${version}.json`);
+  if (!value || value.id !== id) throw new Error("出題内容を確認できません。試験官に申し出てください。");
   return value;
 }
