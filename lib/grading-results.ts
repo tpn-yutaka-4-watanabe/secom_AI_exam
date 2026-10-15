@@ -28,12 +28,13 @@ export function unwrapEvaluation(value: unknown, depth = 0): Obj {
   throw new Error("項目別点数を含む採点JSONがありません。");
 }
 
-export function parseEvaluation(value: unknown, exam: "video" | "email", record?: SubmissionRecord): Evaluation {
+export function parseEvaluation(value: unknown, exam: "video" | "email", record?: SubmissionRecord, allowLegacy = false): Evaluation {
   const obj = unwrapEvaluation(value);
-  const expected = exam === "email" ? mailCriteria(record?.emailTest?.scenario?.id || "") :
+  const mailVersion = allowLegacy && obj.rubric_version === "g4-mail-20261014-v1" ? "g4-mail-20261014-v1" : MAIL_RUBRIC_VERSION;
+  const expected = exam === "email" ? mailCriteria(record?.emailTest?.scenario?.id || "", mailVersion) :
     [1, 1, 2, 1, 2, 1, 2, 2, 2, 1].map((maxScore, i) => ({ id: `R${String(i + 1).padStart(2, "0")}`, maxScore, name: "" }));
   const maxScore = exam === "video" ? 15 : 20;
-  const version = exam === "video" ? "g4-driving-202611-v1" : MAIL_RUBRIC_VERSION;
+  const version = exam === "video" ? "g4-driving-202611-v1" : mailVersion;
   if (obj.rubric_version !== version || (obj.max_score ?? obj.base_max_score) !== maxScore) throw new Error("採点基準の版または満点が一致しません。");
   const rawCriteria = obj.criteria as unknown[];
   if (rawCriteria.length !== expected.length) throw new Error("項目別点数が不足または重複しています。");
@@ -98,7 +99,7 @@ export function withGradingSummaries(record: SubmissionRecord): SubmissionRecord
     if (!group) continue;
     const attempts = group.attempts.map(a => {
       if (a.status !== "success") return a;
-      try { return { ...a, evaluation: parseEvaluation(a.response ?? a.message, exam, record), validationError: undefined }; }
+      try { return { ...a, evaluation: parseEvaluation(a.response ?? a.message, exam, record, true), validationError: undefined }; }
       catch (e) { return { ...a, evaluation: undefined, validationError: e instanceof Error ? e.message : "採点形式を確認してください。" }; }
     });
     grading[exam] = { ...group, attempts, summary: summarizeAttempts(attempts) };

@@ -14,6 +14,7 @@ export function detectNgWords(body: string): NgHit[] {
   for (const [index, line] of lines.entries()) {
     const candidates: { start: number; end: number; rule: typeof reference.ngWords[number]; term: string }[] = [];
     for (const rule of reference.ngWords) {
+      if (rule.category !== "社内用語・機器略称") continue;
       for (const term of variants(rule.term)) {
         const needle = term.normalize("NFKC");
         let start = line.toLowerCase().indexOf(needle.toLowerCase());
