@@ -13,6 +13,20 @@ function integer(value: unknown, max: number): number {
 function text(value: unknown): string { return typeof value === "string" ? value : ""; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []; }
 
+// Repair only the known quote delimiter; never discard or rewrite a non-matching fragment.
+function validateEvidence(value: unknown, body: string, criterionId: string): string[] {
+  const error = () => new Error(`採点項目 ${criterionId} の引用根拠が回答本文にありません。`);
+  if (!Array.isArray(value)) throw error();
+  return value.flatMap(q => {
+    if (typeof q !== "string" || !q.trim()) throw error();
+    // Preserve literal delimiters when they really are part of the original answer.
+    if (body.includes(q)) return [q];
+    const parts = q.split("】【");
+    if (parts.length < 2 || parts.some(part => !part.trim() || !body.includes(part))) throw error();
+    return parts;
+  });
+}
+
 // Only structured results are scores. Never extract arbitrary numbers from prose.
 export function unwrapEvaluation(value: unknown, depth = 0): Obj {
   if (depth > 8) throw new Error("採点JSONが見つかりません。");
@@ -47,8 +61,7 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     const score = integer(c.score, rule.maxScore);
     let evidence: string[] | undefined;
     if (exam === "email" && (version === MAIL_RUBRIC_VERSION || c.evidence !== undefined)) {
-      if (!Array.isArray(c.evidence) || c.evidence.some(q => typeof q !== "string" || !q.trim() || !record?.emailTest?.reply.body.includes(q))) throw new Error(`採点項目 ${rule.id} の引用根拠が回答本文にありません。`);
-      evidence = c.evidence as string[];
+      evidence = validateEvidence(c.evidence, record?.emailTest?.reply.body || "", rule.id);
       if (score > 0 && !evidence.length) throw new Error(`採点項目 ${rule.id} の加点根拠がありません。`);
       if (!text(c.comment).trim()) throw new Error(`採点項目 ${rule.id} の判定理由がありません。`);
     }

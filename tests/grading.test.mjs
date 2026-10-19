@@ -127,6 +127,32 @@ test("new mail format validates original evidence, allows legitimate reuse, and 
   assert.equal(parseEvaluation(old,"email",record).needsReview,true);
 });
 
+test("C3/C4 joined evidence is split only when every fragment exists; raw response is preserved", () => {
+  const parts=["まず、配線の見た目につきまして、","また、担当者の説明につきましても、","事業所として真摯に受け止めております。"];
+  const body=parts.join("\n");
+  const result={rubric_version:"g4-mail-20261019-v1",max_score:20,criteria:mailCriteria("2-1").map(c=>({id:c.id,max_score:c.maxScore,score:0,evidence:[],comment:"該当記述なし"})),deductions:[],ng_decisions:[],summary:"評価"};
+  for (const id of ["C3","C4"]) {
+    const c=result.criteria.find(c=>c.id===id); c.score=1; c.evidence=[parts.join("】【")]; c.comment="引用に基づく評価";
+  }
+  const record={id:"joined",candidateNumber:"99",candidateName:"検証",submittedAt:"2026-10-19T00:00:00Z",emailTest:{scenario:{id:"2-1"},reply:{body},ngHits:[]},grading:{email:{attempts:[1,2,3].map(attempt=>({attempt,status:"success",response:result,validationError:"旧引用エラー"}))}}};
+  const original=JSON.stringify(record);
+  const parsed=parseEvaluation(result,"email",record);
+  assert.equal(parsed.score,2);
+  assert.deepEqual(parsed.criteria.find(c=>c.id==="C3").evidence,parts);
+  assert.deepEqual(parsed.criteria.find(c=>c.id==="C4").evidence,parts);
+  const hydrated=withGradingSummaries(record);
+  assert.equal(hydrated.grading.email.summary.score,2);
+  assert.equal(hydrated.grading.email.attempts[0].validationError,undefined);
+  assert.equal(JSON.stringify(record),original);
+  assert.ok(JSON.stringify(resultSheets([record])).includes("引用："+parts[0]));
+  for (const quote of [parts[0]+"】【架空の引用", "】【"+parts[0], parts[0]+"】【", parts[0]+"】【】【"+parts[1], parts.join("…"), parts[0]+" 】【"+parts[1]]) {
+    const invalid=structuredClone(result); invalid.criteria.find(c=>c.id==="C3").evidence=[quote];
+    assert.throws(()=>parseEvaluation(invalid,"email",record));
+  }
+  const literal={...record,emailTest:{...record.emailTest,reply:{body:parts.join("】【")}}};
+  assert.deepEqual(parseEvaluation(result,"email",literal).criteria.find(c=>c.id==="C3").evidence,[parts.join("】【")]);
+});
+
 test("Brain copy-paste prompt includes exactly the runtime evidence rules and no total in schema", async () => {
   const { MAIL_EVIDENCE_RULES } = await loadTs("lib/mail-evidence-rules.ts");
   const doc = (await readFile(new URL("../docs/BRAIN_MAIL_GRADING_PROMPT.txt",import.meta.url),"utf8")).replaceAll("\r\n","\n");
