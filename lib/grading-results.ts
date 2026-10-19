@@ -30,7 +30,8 @@ export function unwrapEvaluation(value: unknown, depth = 0): Obj {
 
 export function parseEvaluation(value: unknown, exam: "video" | "email", record?: SubmissionRecord, allowLegacy = false): Evaluation {
   const obj = unwrapEvaluation(value);
-  const mailVersion = allowLegacy && obj.rubric_version === "g4-mail-20261014-v1" ? "g4-mail-20261014-v1" : MAIL_RUBRIC_VERSION;
+  const mailVersion = allowLegacy && obj.rubric_version === "g4-mail-20261014-v1" ? "g4-mail-20261014-v1" :
+    obj.rubric_version === "g4-mail-20261015-v1" ? "g4-mail-20261015-v1" : MAIL_RUBRIC_VERSION;
   const expected = exam === "email" ? mailCriteria(record?.emailTest?.scenario?.id || "", mailVersion) :
     [1, 1, 2, 1, 2, 1, 2, 2, 2, 1].map((maxScore, i) => ({ id: `R${String(i + 1).padStart(2, "0")}`, maxScore, name: "" }));
   const maxScore = exam === "video" ? 15 : 20;
@@ -43,7 +44,15 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     if (matches.length !== 1) throw new Error(`採点項目 ${rule.id} が不足または重複しています。`);
     const c = matches[0];
     if (c.max_score !== rule.maxScore) throw new Error(`採点項目 ${rule.id} の配点が一致しません。`);
-    return { id: rule.id, name: rule.name || text(c.name) || rule.id, maxScore: rule.maxScore, score: integer(c.score, rule.maxScore), comment: text(c.comment) };
+    const score = integer(c.score, rule.maxScore);
+    let evidence: string[] | undefined;
+    if (exam === "email" && (version === MAIL_RUBRIC_VERSION || c.evidence !== undefined)) {
+      if (!Array.isArray(c.evidence) || c.evidence.some(q => typeof q !== "string" || !q.trim() || !record?.emailTest?.reply.body.includes(q))) throw new Error(`採点項目 ${rule.id} の引用根拠が回答本文にありません。`);
+      evidence = c.evidence as string[];
+      if (score > 0 && !evidence.length) throw new Error(`採点項目 ${rule.id} の加点根拠がありません。`);
+      if (!text(c.comment).trim()) throw new Error(`採点項目 ${rule.id} の判定理由がありません。`);
+    }
+    return { id: rule.id, name: rule.name || text(c.name) || rule.id, maxScore: rule.maxScore, score, comment: text(c.comment), evidence };
   });
   const knownHits = exam === "email" ? record?.emailTest?.ngHits || [] : [];
   const rawDecisions = exam === "email" ? obj.ng_decisions : [];
@@ -70,8 +79,9 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
   const keys = deductions.map(d => `${d.id}:${d.evidence}:${d.comment}`);
   if (new Set(keys).size !== keys.length) throw new Error("同一の減点明細が重複しています。");
   const score = Math.max(0, criteria.reduce((sum, c) => sum + c.score, 0) - deductions.reduce((sum, d) => sum + d.points, 0));
-  if (integer(obj.score ?? obj.base_score, maxScore) !== score) throw new Error("項目点・減点の合計と総得点が一致しません。");
+  // Model-reported totals (score/base_score) are ignored; validated line items are authoritative.
   const reviewReasons = strings(obj.review_reasons);
+  if (exam === "email" && version !== MAIL_RUBRIC_VERSION) reviewReasons.push("旧形式の採点結果：項目別引用根拠の検証は未保証。新プロンプトへの更新を確認してください。");
   const bonus = obj.bonus && typeof obj.bonus === "object" ? obj.bonus as Obj : null;
   if (bonus?.matched) reviewReasons.push("動画の加点候補あり（配点未確定・通常点には加算していません）");
   return { rubricVersion: version, score, maxScore, criteria, deductions, summary: text(obj.summary),

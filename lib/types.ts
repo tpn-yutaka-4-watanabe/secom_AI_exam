@@ -30,7 +30,7 @@ export type BrainAttempt = {
   validationError?: string;
 };
 
-export type ScoreItem = { id: string; name: string; maxScore: number; score: number; comment: string };
+export type ScoreItem = { id: string; name: string; maxScore: number; score: number; comment: string; evidence?: string[] };
 export type Deduction = { id: string; points: number; evidence: string; comment: string; ngHitIds: string[] };
 export type Evaluation = {
   rubricVersion: string;

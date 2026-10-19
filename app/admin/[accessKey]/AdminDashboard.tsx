@@ -17,8 +17,8 @@ function GradeSummary({ result }: { result?: GradingResult }) {
     <p>3回の得点：{s?.scores.map(v => v ?? "未取得").join(" / ") || "未取得"}　／　{s?.method === "mode" ? "最頻値" : s?.method === "median" ? "中央値" : "3回分の正常な採点が必要です"}</p>
     {s?.needsReview && <p className="attempt-error">要確認：得点は暫定です。接続・形式・採点内容を確認してください。</p>}
     {selected && <><p>共有する評価：採点{s?.selectedAttempt}回目</p><p>{selected.summary}</p>
-      <table className="score-table"><thead><tr><th>評価項目</th><th>点数</th><th>評価</th></tr></thead><tbody>{selected.criteria.map(c => <tr key={c.id}><td>{c.name}</td><td>{c.score} / {c.maxScore}</td><td>{c.comment}</td></tr>)}</tbody></table>
-      {selected.deductions.map((d, i) => <p key={i}>減点 {d.points}点：{d.comment} {d.evidence}</p>)}
+      <table className="score-table"><thead><tr><th>評価項目</th><th>点数</th><th>評価・引用根拠</th></tr></thead><tbody>{selected.criteria.map(c => <tr key={c.id}><td>{c.name}</td><td>{c.score} / {c.maxScore}</td><td>{c.comment}{c.evidence && <div>根拠：{c.evidence.length ? c.evidence.map(q => `「${q}」`).join(" / ") : "該当記述なし"}</div>}</td></tr>)}</tbody></table>
+      {selected.deductions.map((d, i) => <p key={i}>減点 {d.points}点：{d.comment} {d.evidence || (d.id === "D3" ? "該当記述なし（未回答）" : "")}</p>)}
     </>}
   </div>;
 }
