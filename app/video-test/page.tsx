@@ -48,10 +48,11 @@ export default function VideoTestPage() {
     <div className="exam-title-row"><div><div className="eyebrow">VIDEO OBSERVATION EXAM</div><h1>動画確認試験</h1>
       <p>試験官が別途上映する映像を見て、良かった点は○、アドバイスが必要な点は×を選んでください。</p></div>
       <CandidateBadge number={draft.candidateNumber} name={draft.candidateName} /></div>
+    <div className="video-response-workspace">
     <section className="findings-panel video-memo-panel" aria-labelledby="video-memo-heading">
       <div className="panel-heading"><label id="video-memo-heading" htmlFor="video-memo">メモ（採点対象外）</label></div>
       <div className="video-memo-body">
-        <p id="video-memo-help">映像を見ながら自由にメモしてください。メモは提出・保存されません。採点する回答は下の表に記入してください。</p>
+        <p id="video-memo-help">映像を見ながら自由にメモしてください。メモは提出・保存されません。採点する回答は回答表に記入してください。</p>
         <textarea id="video-memo" rows={6} aria-describedby="video-memo-help" placeholder="気づいたことを自由にメモ" />
       </div>
     </section>
@@ -65,6 +66,7 @@ export default function VideoTestPage() {
         </article>)}
         <button className="add-finding-button" type="button" onClick={() => setFindings(rows => [...rows, createFinding()])}><span>＋</span>記入欄を増やす</button>
       </div></section>
+    </div>
     <div className="final-confirmation"><label className="check-line"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>試験官の案内に従い、回答を確認しました。最終回答として提出します。</span></label></div>
     {error && <div className="form-error" role="alert">{error}</div>}
     <div className="exam-actions"><span>再読み込み・画面を閉じると入力内容は失われます。</span><button className="primary-button" disabled={submitting} onClick={submit}>{submitting ? "回答を保存・採点しています…" : "動画試験の回答を提出する"}</button></div>

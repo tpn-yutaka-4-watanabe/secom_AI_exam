@@ -155,9 +155,13 @@ input::placeholder, textarea::placeholder { color: #aab1b9; }
 .video-hint span { margin-right: 12px; color: var(--red); font-weight: 800; }
 .finding-list { max-height: calc(100vh - 300px); min-height: 520px; padding: 15px; overflow: auto; display: grid; gap: 13px; align-content: start; }
 .video-answer-page .finding-list { max-height: none; }
-.video-memo-panel { margin-bottom: 20px; }
+.video-response-workspace { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(580px, 1.6fr); gap: 20px; align-items: start; }
+.video-response-workspace > section { min-width: 0; }
+.video-memo-panel { position: sticky; top: 18px; }
+.video-memo-panel .panel-heading label { color: var(--navy); font-size: 13px; font-weight: 800; }
 .video-memo-body { padding: 16px; }
 .video-memo-body p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.video-memo-body textarea { height: clamp(320px, 60vh, 680px); }
 .grading-summary { padding: 20px; margin: 20px 0; background: #f4f7fa; border: 1px solid var(--line); }
 .grading-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .score-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -359,6 +363,12 @@ input::placeholder, textarea::placeholder { color: #aab1b9; }
   .attempt-grid { grid-template-columns: 1fr; }
   .admin-table-head, .admin-table-row { grid-template-columns: 60px 85px 1fr 1fr; }
   .admin-exam-tools { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 960px) {
+  .video-response-workspace { grid-template-columns: minmax(0, 1fr); }
+  .video-memo-panel { position: static; }
+  .video-memo-body textarea { height: 260px; }
 }
 
 @media (max-width: 760px) {
