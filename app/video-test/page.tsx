@@ -48,6 +48,13 @@ export default function VideoTestPage() {
     <div className="exam-title-row"><div><div className="eyebrow">VIDEO OBSERVATION EXAM</div><h1>動画確認試験</h1>
       <p>試験官が別途上映する映像を見て、良かった点は○、アドバイスが必要な点は×を選んでください。</p></div>
       <CandidateBadge number={draft.candidateNumber} name={draft.candidateName} /></div>
+    <section className="findings-panel video-memo-panel" aria-labelledby="video-memo-heading">
+      <div className="panel-heading"><label id="video-memo-heading" htmlFor="video-memo">メモ（採点対象外）</label></div>
+      <div className="video-memo-body">
+        <p id="video-memo-help">映像を見ながら自由にメモしてください。メモは提出・保存されません。採点する回答は下の表に記入してください。</p>
+        <textarea id="video-memo" rows={6} aria-describedby="video-memo-help" placeholder="気づいたことを自由にメモ" />
+      </div>
+    </section>
     <section className="findings-panel"><div className="panel-heading"><span>シーンごとの評価</span><small>同じ指摘を繰り返し記入する必要はありません</small></div>
       <div className="finding-list finding-table-list">
         <div className="finding-column-head" aria-hidden="true"><span>シーン</span><span>○／×</span><span>理由・ポイント</span></div>
