@@ -45,15 +45,15 @@ export default function EmailTestPage() {
   }
   if (!draft) return <ExamShell step={1} examType="email"><ExamStartForm examType="email" onStarted={setDraft} /></ExamShell>;
   return <ExamShell step={2} examType="email"><main className="exam-page email-page">
-    <div className="exam-title-row"><div><div className="eyebrow">EMAIL COMPOSITION EXAM</div><h1>メール作成試験</h1><p>状況説明とお客様のご指摘を読み、一次回答メールの本文を作成してください。</p></div><CandidateBadge number={draft.candidateNumber} name={draft.candidateName} /></div>
+    <div className="exam-title-row"><div><div className="eyebrow">EMAIL RESPONSE EXAM</div><h1>メール対応力試験</h1><p>提示された状況に基づき、お客様へのメール本文を作成します。</p></div><CandidateBadge number={draft.candidateNumber} name={draft.candidateName} numberLabel="研修番号" /></div>
     {error && <div className="form-error" role="alert">{error}</div>}
     {!scenario ? <p>問題を読み込んでいます。読み込めない場合は試験官に申し出てください。</p> :
       <form onSubmit={submit}><div className="mail-workspace">
-        <section className="mail-card"><div className="mail-label"><span>問題 {scenario.id}</span>{scenario.title}</div><div className="mail-body">{scenario.situation}</div><div className="mail-body">{scenario.request}</div></section>
+        <section className="mail-card mail-situation"><div className="mail-label"><span>問題 {scenario.id}</span>状況説明</div><div className="mail-situation-scroll" tabIndex={0} aria-label="状況説明とお客様からのご指摘"><div className="mail-body">{scenario.situation}</div><div className="mail-body">{scenario.request}</div></div></section>
         <section className="mail-card reply-mail"><div className="mail-label"><span>回答</span>作成するメール本文</div><div className="reply-fields">
           <label className="reply-body-field"><span>本文（宛名・挨拶・署名も本文に含めてください）</span><textarea rows={26} value={body} maxLength={20000} onChange={e => setBody(e.target.value)} placeholder="ここにメールの本文を入力してください。" required /><small>{body.length.toLocaleString("ja-JP")}文字</small></label>
         </div></section>
       </div><div className="final-confirmation"><label className="check-line"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>回答内容を確認しました。最終回答として提出します。</span></label></div>
-      <div className="exam-actions"><span>再読み込み・画面を閉じると入力内容は失われます。</span><button className="primary-button" disabled={submitting}>{submitting ? "回答を保存・採点しています…" : "メール試験の回答を提出する"}</button></div></form>}
+      <div className="exam-actions"><span>再読み込み・画面を閉じると入力内容は失われます。</span><div className="email-submit-area"><button className="primary-button" disabled={!confirmed || submitting}>{submitting ? "回答を保存・採点しています…" : "メール試験の回答を提出する"}</button><p role="note">※処理に時間がかかる場合があります。ボタンを繰り返し押さないでください。</p></div></div></form>}
   </main></ExamShell>;
 }

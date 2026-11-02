@@ -1,7 +1,7 @@
-export function CandidateBadge({ number, name }: { number: string; name: string }) {
+export function CandidateBadge({ number, name, numberLabel = "受験番号" }: { number: string; name: string; numberLabel?: string }) {
   return (
     <div className="candidate-badge" aria-label={`受験者 ${number} ${name}`}>
-      <span>受験番号</span>
+      <span>{numberLabel}</span>
       <strong>{number}</strong>
       <i />
       <strong>{name}</strong>

@@ -213,6 +213,16 @@ input::placeholder, textarea::placeholder { color: #aab1b9; }
 .reply-fields .reply-body-field { position: relative; grid-template-columns: 1fr; align-items: start; }
 .reply-body-field textarea { min-height: 445px; }
 .reply-body-field small { position: absolute; right: 11px; bottom: 9px; padding: 3px 6px; background: rgba(255,255,255,.92); color: #87919c; font-size: 9px; }
+.email-page .mail-card { height: clamp(440px, calc(100dvh - 320px), 720px); display: flex; flex-direction: column; min-height: 0; }
+.email-page .mail-label { flex-shrink: 0; }
+.mail-situation-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.email-page .mail-body { min-height: 0; overflow-wrap: anywhere; }
+.email-page .reply-fields { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.email-page .reply-body-field { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: stretch; }
+.email-page .reply-body-field textarea { flex: 1; min-height: 0; height: auto; resize: none; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 35px; }
+.email-submit-area { width: min(100%, 440px); }
+.email-submit-area button { width: 100%; }
+.email-submit-area p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .final-confirmation { margin-top: 20px; padding: 18px 20px; background: #fff; border: 1px solid var(--line); }
 .check-line { display: flex; align-items: flex-start; gap: 11px; color: #2e3c4b; font-size: 12px; font-weight: 650; line-height: 1.6; }
 .check-line input { width: 17px; height: 17px; margin-top: 1px; accent-color: var(--red); }

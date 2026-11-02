@@ -13,14 +13,15 @@ const examCopy: Record<ExamType, { number: string; title: string; description: s
   },
   email: {
     number: "02",
-    title: "メール対応試験",
-    description: "状況説明に基づき、お客様への一次回答メールの本文を作成します。",
+    title: "メール対応力試験",
+    description: "提示された状況に基づき、お客様へのメール本文を作成します。",
     notice: "宛名・挨拶・署名も含めて本文を作成してください。",
   },
 };
 
 export function ExamStartForm({ examType, onStarted }: { examType: ExamType; onStarted: (draft: ExamDraft) => void }) {
   const copy = examCopy[examType];
+  const numberLabel = examType === "email" ? "研修番号" : "受験番号";
   const [candidateNumber, setCandidateNumber] = useState("");
   const [candidateName, setCandidateName] = useState("");
 
@@ -47,10 +48,10 @@ export function ExamStartForm({ examType, onStarted }: { examType: ExamType; onS
       <section className="start-card" aria-labelledby="candidate-heading">
         <div className="card-kicker">CANDIDATE INFORMATION</div>
         <h2 id="candidate-heading">受験情報を入力</h2>
-        <p>試験官の案内を確認し、受験番号と氏名を入力してください。</p>
+        <p>試験官の案内を確認し、{numberLabel}と氏名を入力してください。</p>
         <form onSubmit={submit} className="start-form">
           <label>
-            <span>受験番号</span>
+            <span>{numberLabel}</span>
             <input
               value={candidateNumber}
               onChange={(event) => setCandidateNumber(event.target.value)}

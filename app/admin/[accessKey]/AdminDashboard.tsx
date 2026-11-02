@@ -17,7 +17,9 @@ function GradeSummary({ result }: { result?: GradingResult }) {
     <p>3回の得点：{s?.scores.map(v => v ?? "未取得").join(" / ") || "未取得"}　／　{s?.method === "mode" ? "最頻値" : s?.method === "median" ? "中央値" : "3回分の正常な採点が必要です"}</p>
     {s?.needsReview && <p className="attempt-error">要確認：得点は暫定です。接続・形式・採点内容を確認してください。</p>}
     {selected && <><p>共有する評価：採点{s?.selectedAttempt}回目</p><p>{selected.summary}</p>
-      <table className="score-table"><thead><tr><th>評価項目</th><th>点数</th><th>評価・引用根拠</th></tr></thead><tbody>{selected.criteria.map(c => <tr key={c.id}><td>{c.name}</td><td>{c.score} / {c.maxScore}</td><td>{c.comment}{c.evidence && <div>根拠：{c.evidence.length ? c.evidence.map(q => `「${q}」`).join(" / ") : "該当記述なし"}</div>}</td></tr>)}</tbody></table>
+      {selected.rubricVersion === "g4-mail-20261102-v2" && <p>共通：{selected.criteria.filter(c => c.id.startsWith("C")).reduce((n,c) => n+c.score,0)} / 10　設問別：{selected.criteria.filter(c => c.id.startsWith("S")).reduce((n,c) => n+c.score,0)} / 8　特別加点：{selected.criteria.filter(c => c.id.startsWith("B")).reduce((n,c) => n+c.score,0)} / 2　減点：{selected.deductions.reduce((n,d) => n+d.points,0)}</p>}
+      <p>採点基準：{selected.rubricVersion}</p>
+      <table className="score-table"><thead><tr><th>評価項目</th><th>点数</th><th>評価・引用根拠</th></tr></thead><tbody>{selected.criteria.map(c => <tr key={c.id}><td>{c.id.startsWith("B") ? "特別加点：" : ""}{c.name}</td><td>{c.score} / {c.maxScore}</td><td>{c.comment}{c.evidence && <div>根拠：{c.evidence.length ? c.evidence.map(q => `「${q}」`).join(" / ") : "該当記述なし"}</div>}</td></tr>)}</tbody></table>
       {selected.deductions.map((d, i) => <p key={i}>減点 {d.points}点：{d.comment} {d.evidence || (d.id === "D3" ? "該当記述なし（未回答）" : "")}</p>)}
     </>}
   </div>;
@@ -217,7 +219,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
         <aside className="submission-list">
           <div className="list-head">
             <div><span className="eyebrow">SUBMISSIONS</span><h1>受験結果</h1></div>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="受験番号・氏名・試験種別で検索" aria-label="受験結果を検索" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="研修番号／受験番号・氏名・試験種別で検索" aria-label="受験結果を検索" />
           </div>
           <div className="submission-items">
             {filtered.map((item) => (
@@ -263,7 +265,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
 
               {selected.emailTest && (
                 <section className="result-section">
-                  <div className="section-title"><span>M</span><div><h3>メール対応試験</h3><p>作成したメール本文</p></div></div>
+                  <div className="section-title"><span>M</span><div><h3>メール対応力試験</h3><p>作成したメール本文</p></div></div>
                   <details className="admin-received-email">
                     <summary>出題した状況を確認</summary>
                     <strong>{selected.emailTest.scenario?.title ?? selected.emailTest.receivedEmail?.subject}</strong>

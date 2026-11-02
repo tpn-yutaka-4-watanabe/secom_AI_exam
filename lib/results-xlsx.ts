@@ -47,11 +47,11 @@ function zip(files: [string, string][]) {
 }
 
 export function resultSheets(records: SubmissionRecord[]): Sheet[] {
-  const summary: Sheet = { name: "採点一覧", widths: [38, 12, 20, 12, 10, 10, 10, 12, 14, 12, 65, 50, 24, 14], rows: [["受付番号", "受験番号", "氏名", "試験", "採点1", "採点2", "採点3", "採用点", "採用方式", "コメント採用回", "評価（採用回のみ）", "確認事項", "提出日時（日本時間）", "問題番号"]] };
-  const answers: Sheet = { name: "入力内容", widths: [38, 12, 20, 12, 14, 24, 10, 100], rows: [["受付番号", "受験番号", "氏名", "試験", "行・分割番号", "シーン／項目", "○×", "入力内容（原文）"]] };
-  const items: Sheet = { name: "項目別点数", widths: [38, 12, 20, 12, 12, 28, 10, 10, 10, 10, 12, 65], rows: [["受付番号", "受験番号", "氏名", "試験", "項目ID", "評価項目", "配点", "採点1", "採点2", "採点3", "採用回の点", "評価（採用回のみ）"]] };
-  const deductions: Sheet = { name: "減点・NG確認", widths: [38, 12, 20, 12, 12, 16, 12, 12, 55, 65], rows: [["受付番号", "受験番号", "氏名", "試験", "採用回", "区分／ID", "減点", "行番号", "該当箇所", "評価（採用回のみ）"]] };
-  const notes: Sheet = { name: "出力の説明", widths: [30, 110], rows: [["項目", "説明"], ["採用点", "3回の最頻値。同点がなければ中央値。3回の有効な点数が揃わない場合は空欄（要確認）。"], ["コメント・項目別評価", "採用点と同じ得点の最初の回のみを掲載。3回のコメントの混在・平均化はしません。"], ["採点一覧の計算", "採点1～3からExcel数式で採用点を計算します。コメント・採用回・項目点は出力時のスナップショットなので、点数を編集した場合はそれらも確認してください。"], ["動画", "通常点15点満点。配点未確定の加点候補は確認事項とし、通常点に算入しません。"], ["メール", "共通8点＋設問別12点－減点。最低0点。2-1・2-2・2-3に対応。NG文字列は候補抽出後、文脈と署名例外を判定します。"], ["NG候補", "記載されている候補すべてが減点対象とは限りません。採用回の判定を確認してください。"], ["長文", "長い入力・評価は分割行で収録します。受験番号は先頭の0を保持する文字列です。"], ["提出単位", "同じ人の再提出も別の受付番号として全件出力します。管理画面の検索で絞ってから出力できます。"], ["合否", "合否基準は未指定のため自動判定しません。要確認の得点は暫定として扱ってください。"]] };
+  const summary: Sheet = { name: "採点一覧", widths: [38, 20, 20, 12, 10, 10, 10, 12, 14, 12, 65, 50, 24, 14, 12, 12, 12, 12, 30], rows: [["受付番号", "研修番号／受験番号", "氏名", "試験", "採点1", "採点2", "採点3", "採用点", "採用方式", "コメント採用回", "評価（採用回のみ）", "確認事項", "提出日時（日本時間）", "問題番号", "共通点（採用回）", "設問別点（採用回）", "特別加点（採用回）", "減点合計（採用回）", "採点基準版"]] };
+  const answers: Sheet = { name: "入力内容", widths: [38, 12, 20, 12, 14, 24, 10, 100], rows: [["受付番号", "研修番号／受験番号", "氏名", "試験", "行・分割番号", "シーン／項目", "○×", "入力内容（原文）"]] };
+  const items: Sheet = { name: "項目別点数", widths: [38, 12, 20, 12, 12, 28, 10, 10, 10, 10, 12, 65], rows: [["受付番号", "研修番号／受験番号", "氏名", "試験", "項目ID", "評価項目", "配点", "採点1", "採点2", "採点3", "採用回の点", "評価（採用回のみ）"]] };
+  const deductions: Sheet = { name: "減点・NG確認", widths: [38, 12, 20, 12, 12, 16, 12, 12, 55, 65], rows: [["受付番号", "研修番号／受験番号", "氏名", "試験", "採用回", "区分／ID", "減点", "行番号", "該当箇所", "評価（採用回のみ）"]] };
+  const notes: Sheet = { name: "出力の説明", widths: [30, 110], rows: [["項目", "説明"], ["採用点", "3回の最頻値。同点がなければ中央値。3回の有効な点数が揃わない場合は空欄（要確認）。"], ["コメント・項目別評価", "採用点と同じ得点の最初の回のみを掲載。3回のコメントの混在・平均化はしません。"], ["採点一覧の計算", "採点1～3からExcel数式で採用点を計算します。コメント・採用回・項目点は出力時のスナップショットなので、点数を編集した場合はそれらも確認してください。"], ["動画", "通常点15点満点。配点未確定の加点候補は確認事項とし、通常点に算入しません。"], ["メール", "新版は共通10点＋設問別8点＋特別加点2点－減点（最低0点・20点満点）。旧版の結果は当時の配点で表示します。NG対象は社内用語・機器略称5語のみ。"], ["NG候補", "記載されている候補すべてが減点対象とは限りません。採用回の判定を確認してください。"], ["長文", "長い入力・評価は分割行で収録します。研修番号／受験番号は先頭の0を保持する文字列です。"], ["提出単位", "同じ人の再提出も別の受付番号として全件出力します。管理画面の検索で絞ってから出力できます。"], ["合否", "合否基準は未指定のため自動判定しません。要確認の得点は暫定として扱ってください。"]] };
   for (const raw of records) {
     const record = withGradingSummaries(raw);
     for (const exam of ["video", "email"] as const) {
@@ -63,7 +63,9 @@ export function resultSheets(records: SubmissionRecord[]): Sheet[] {
       const reasons = [...new Set([...(group?.attempts.flatMap(a => [a.error ? `採点${a.attempt}: 接続エラー` : "", a.validationError ? `採点${a.attempt}: ${a.validationError}` : "", a.evaluation?.needsReview ? `採点${a.attempt}: 要確認` : ""]).filter(Boolean) || []), ...(selected?.reviewReasons || [])])];
       summary.rows.push([...prefix, ...(s?.scores || [null, null, null]), { formula: `IF(COUNT(E${row}:G${row})=3,IFERROR(MODE(E${row}:G${row}),MEDIAN(E${row}:G${row})),"")`, value: s?.score ?? null },
         s?.method === "mode" ? "最頻値" : s?.method === "median" ? "中央値" : "未確定", s?.selectedAttempt ?? null, selected?.summary || "",
-        (s?.needsReview ? "要確認。" : "") + reasons.join(" / "), new Date(record.submittedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }), record.emailTest?.scenario?.id && exam === "email" ? record.emailTest.scenario.id : ""]);
+        (s?.needsReview ? "要確認。" : "") + reasons.join(" / "), new Date(record.submittedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }), record.emailTest?.scenario?.id && exam === "email" ? record.emailTest.scenario.id : "",
+        ...["C", "S", "B"].map(prefix => exam === "email" && selected ? selected.criteria.filter(c => c.id.startsWith(prefix)).reduce((n,c) => n+c.score,0) : null),
+        exam === "email" && selected ? selected.deductions.reduce((n,d) => n+d.points,0) : null, selected?.rubricVersion || ""]);
       if (exam === "video") record.videoTest?.findings.forEach((f, i) => {
         answers.rows.push([...prefix, i + 1, f.scene ?? f.issue ?? "", f.judgment ?? "旧形式", f.reason ?? f.recommendation ?? ""]);
       });
@@ -76,7 +78,7 @@ export function resultSheets(records: SubmissionRecord[]): Sheet[] {
         if (mail.reply.subject) answers.rows.push([...prefix, "旧形式", "件名", "", mail.reply.subject]);
       }
       const exemplar = selected || group?.attempts.find(a => a.evaluation)?.evaluation;
-      for (const c of exemplar?.criteria || []) items.rows.push([...prefix, c.id, c.name, c.maxScore, ...[1, 2, 3].map(n => group?.attempts.find(a => a.attempt === n)?.evaluation?.criteria.find(v => v.id === c.id)?.score ?? null), selected?.criteria.find(v => v.id === c.id)?.score ?? null, [selected?.criteria.find(v => v.id === c.id)?.comment || "", ...(selected?.criteria.find(v => v.id === c.id)?.evidence || []).map(q => `引用：${q}`)].join("\n")]);
+      for (const c of exemplar?.criteria || []) items.rows.push([...prefix, c.id, (c.id.startsWith("B") ? "特別加点：" : "") + c.name, c.maxScore, ...[1, 2, 3].map(n => group?.attempts.find(a => a.attempt === n)?.evaluation?.criteria.find(v => v.id === c.id)?.score ?? null), selected?.criteria.find(v => v.id === c.id)?.score ?? null, [selected?.criteria.find(v => v.id === c.id)?.comment || "", ...(selected?.criteria.find(v => v.id === c.id)?.evidence || []).map(q => `引用：${q}`)].join("\n")]);
       for (const d of selected?.deductions || []) deductions.rows.push([...prefix, s?.selectedAttempt ?? null, d.id, d.points, null, d.evidence || (d.id === "D3" ? "該当記述なし（未回答）" : ""), d.comment]);
       if (exam === "email") for (const hit of record.emailTest?.ngHits || []) {
         const decision = selected?.ngDecisions?.find(d => d.hitId === hit.id);

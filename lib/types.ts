@@ -44,7 +44,7 @@ export type Evaluation = {
   ngDecisions?: { hitId: string; decision: "deduct" | "allow" | "review"; comment: string }[];
 };
 export type NgHit = { id: string; ruleId: string; term: string; line: number; context: string; signatureCandidate: boolean; note: string };
-export type EmailScenario = { id: string; title: string; situation: string; request: string; version: string; enabled: boolean };
+export type EmailScenario = { id: string; title: string; situation: string; request: string; version: string; enabled: boolean; rubricVersion?: string };
 
 export type GradingResult = {
   status: "completed" | "error";

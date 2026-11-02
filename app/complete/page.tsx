@@ -29,9 +29,9 @@ export default function CompletePage() {
         {receipt ? (
           <section className="receipt-card">
             <div><span>受付番号</span><strong>{receipt.id}</strong></div>
-            <div><span>受験番号</span><strong>{receipt.candidateNumber}</strong></div>
+            <div><span>{receipt.examType === "email" ? "研修番号" : "受験番号"}</span><strong>{receipt.candidateNumber}</strong></div>
             <div><span>受験者名</span><strong>{receipt.candidateName}</strong></div>
-            <div><span>試験種別</span><strong>{receipt.examType === "video" ? "動画確認試験" : "メール対応試験"}</strong></div>
+            <div><span>試験種別</span><strong>{receipt.examType === "video" ? "動画確認試験" : "メール対応力試験"}</strong></div>
             <div><span>受付日時</span><strong>{new Date(receipt.submittedAt).toLocaleString("ja-JP")}</strong></div>
             <div className="receipt-status">
               <span>採点接続状況</span>

@@ -9,7 +9,7 @@ export default function StartPage() {
           <div className="eyebrow">GRADE 4 CERTIFICATION</div>
           <h1>グレード4<br />認定試験</h1>
           <p className="start-lead">
-            動画確認試験とメール対応試験は、それぞれ独立した試験として実施します。試験官から案内された試験を選択してください。
+            動画確認試験とメール対応力試験は、それぞれ独立した試験として実施します。試験官から案内された試験を選択してください。
           </p>
         </section>
 
@@ -32,8 +32,8 @@ export default function StartPage() {
             <article>
               <span className="outline-number">02</span>
               <div>
-                <h3>メール対応試験</h3>
-                <p>状況説明を読み、お客様への一次回答メールの本文を作成します。</p>
+                <h3>メール対応力試験</h3>
+                <p>提示された状況に基づき、お客様へのメール本文を作成します。</p>
                 <code>/email-test</code>
               </div>
               <Link href="/email-test" className="primary-button">メール試験を開く <span>→</span></Link>

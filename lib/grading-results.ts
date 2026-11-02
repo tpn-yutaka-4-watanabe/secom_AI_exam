@@ -1,5 +1,5 @@
 import type { BrainAttempt, Evaluation, GradingSummary, SubmissionRecord } from "./types";
-import { mailCriteria, MAIL_RUBRIC_VERSION } from "./mail-grading";
+import { mailCriteria, MAIL_RUBRIC_VERSION, MAIL_PREVIOUS_VERSIONS, scenarioRubricVersion } from "./mail-grading";
 
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
@@ -44,8 +44,13 @@ export function unwrapEvaluation(value: unknown, depth = 0): Obj {
 
 export function parseEvaluation(value: unknown, exam: "video" | "email", record?: SubmissionRecord, allowLegacy = false): Evaluation {
   const obj = unwrapEvaluation(value);
-  const mailVersion = allowLegacy && obj.rubric_version === "g4-mail-20261014-v1" ? "g4-mail-20261014-v1" :
-    obj.rubric_version === "g4-mail-20261015-v1" ? "g4-mail-20261015-v1" : MAIL_RUBRIC_VERSION;
+  const responseVersion = text(obj.rubric_version);
+  const isPrevious = MAIL_PREVIOUS_VERSIONS.some(v => v === responseVersion);
+  const mailVersion = isPrevious && (allowLegacy || responseVersion !== "g4-mail-20261014-v1") ? responseVersion : MAIL_RUBRIC_VERSION;
+  const scenario = record?.emailTest?.scenario;
+  if (exam === "email" && scenario && (scenario.rubricVersion || (!allowLegacy && scenario.version)) && responseVersion !== scenarioRubricVersion(scenario)) {
+    throw new Error("出題時の採点基準とBrainAPI応答の版が一致しません。メール用プロンプトの設定を確認してください。");
+  }
   const expected = exam === "email" ? mailCriteria(record?.emailTest?.scenario?.id || "", mailVersion) :
     [1, 1, 2, 1, 2, 1, 2, 2, 2, 1].map((maxScore, i) => ({ id: `R${String(i + 1).padStart(2, "0")}`, maxScore, name: "" }));
   const maxScore = exam === "video" ? 15 : 20;
@@ -60,7 +65,7 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     if (c.max_score !== rule.maxScore) throw new Error(`採点項目 ${rule.id} の配点が一致しません。`);
     const score = integer(c.score, rule.maxScore);
     let evidence: string[] | undefined;
-    if (exam === "email" && (version === MAIL_RUBRIC_VERSION || c.evidence !== undefined)) {
+    if (exam === "email" && (version === MAIL_RUBRIC_VERSION || version === "g4-mail-20261019-v1" || c.evidence !== undefined)) {
       evidence = validateEvidence(c.evidence, record?.emailTest?.reply.body || "", rule.id);
       if (score > 0 && !evidence.length) throw new Error(`採点項目 ${rule.id} の加点根拠がありません。`);
       if (!text(c.comment).trim()) throw new Error(`採点項目 ${rule.id} の判定理由がありません。`);
@@ -94,9 +99,9 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
   const score = Math.max(0, criteria.reduce((sum, c) => sum + c.score, 0) - deductions.reduce((sum, d) => sum + d.points, 0));
   // Model-reported totals (score/base_score) are ignored; validated line items are authoritative.
   const reviewReasons = strings(obj.review_reasons);
-  if (exam === "email" && version !== MAIL_RUBRIC_VERSION) reviewReasons.push("旧形式の採点結果：項目別引用根拠の検証は未保証。新プロンプトへの更新を確認してください。");
+  if (exam === "email" && (version === "g4-mail-20261014-v1" || version === "g4-mail-20261015-v1")) reviewReasons.push("旧形式の採点結果：項目別引用根拠の検証は未保証。新プロンプトへの更新を確認してください。");
   const bonus = obj.bonus && typeof obj.bonus === "object" ? obj.bonus as Obj : null;
-  if (bonus?.matched) reviewReasons.push("動画の加点候補あり（配点未確定・通常点には加算していません）");
+  if (exam === "video" && bonus?.matched) reviewReasons.push("動画の加点候補あり（配点未確定・通常点には加算していません）");
   return { rubricVersion: version, score, maxScore, criteria, deductions, summary: text(obj.summary),
     needsReview: obj.needs_review === true || obj.status === "needs_review" || reviewReasons.length > 0 || Boolean(bonus?.matched) || ngDecisions.some(d => d.decision === "review"),
     reviewReasons, ngDecisions };

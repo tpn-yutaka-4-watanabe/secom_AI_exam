@@ -66,7 +66,7 @@ async function validatePayload(value: unknown): Promise<ValidSubmission> {
   const startedAt = stringValue(payload.startedAt) || new Date().toISOString();
 
   if (!examType) throw new Error("試験種別が正しくありません。");
-  if (!candidateNumber || !candidateName) throw new Error("受験番号と受験者名を入力してください。");
+  if (!candidateNumber || !candidateName) throw new Error(`${examType === "email" ? "研修番号" : "受験番号"}と受験者名を入力してください。`);
 
   if (examType === "video") {
     const videoFindings = parseFindings(payload.videoFindings);

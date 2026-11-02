@@ -2,7 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BlobServiceClient, type ContainerClient } from "@azure/storage-blob";
-import reference from "./mail-reference.json";
+import reference from "./mail-reference-v2.json";
+import { currentEmailScenario, presetEmailScenario } from "./mail-scenario-versions";
 import type { EmailScenario } from "./types";
 
 const containerName = process.env.AZURE_STORAGE_CONTAINER?.trim() || "exam-data";
@@ -64,7 +65,9 @@ async function writeJson(blobName: string, localFileName: string, value: unknown
 
 export function emailScenarioOptions() { return reference.scenarios; }
 export async function getEmailExamContent(): Promise<EmailScenario> {
-  return (await readJson<EmailScenario>(emailBlobName, "email-scenario.json")) ?? reference.scenarios[0];
+  const saved = await readJson<EmailScenario>(emailBlobName, "email-scenario.json");
+  // Keep the selected problem, but serve the revised preset. Old settings/archives remain intact.
+  return currentEmailScenario(saved);
 }
 export async function saveEmailExamContent(value: EmailScenario): Promise<EmailScenario> {
   const preset = reference.scenarios.find(item => item.id === value.id && item.enabled);
@@ -78,7 +81,8 @@ export async function saveEmailExamContent(value: EmailScenario): Promise<EmailS
 export async function getSubmittedScenario(id: string, version: string): Promise<EmailScenario> {
   const preset = reference.scenarios.find(s => s.id === id && s.enabled);
   if (!preset) throw new Error("この問題は利用できません。");
-  if (version === preset.version) return preset;
+  const known = presetEmailScenario(id, version);
+  if (known) return known;
   if (!/^[a-f0-9-]{36}$/.test(version)) throw new Error("問題のバージョンが正しくありません。");
   const value = await readJson<EmailScenario>(`settings/scenarios/${version}.json`, `scenario-${version}.json`);
   if (!value || value.id !== id) throw new Error("出題内容を確認できません。試験官に申し出てください。");
