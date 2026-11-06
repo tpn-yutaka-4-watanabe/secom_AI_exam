@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { BlobServiceClient, type ContainerClient } from "@azure/storage-blob";
 import reference from "./mail-reference-v2.json";
-import { currentEmailScenario, presetEmailScenario } from "./mail-scenario-versions";
+import { currentEmailScenario, presetEmailScenario, revisedEmailScenario, MAIL_CONTENT_SUFFIX } from "./mail-scenario-versions";
 import type { EmailScenario } from "./types";
 
 const containerName = process.env.AZURE_STORAGE_CONTAINER?.trim() || "exam-data";
@@ -83,8 +83,10 @@ export async function getSubmittedScenario(id: string, version: string): Promise
   if (!preset) throw new Error("この問題は利用できません。");
   const known = presetEmailScenario(id, version);
   if (known) return known;
-  if (!/^[a-f0-9-]{36}$/.test(version)) throw new Error("問題のバージョンが正しくありません。");
-  const value = await readJson<EmailScenario>(`settings/scenarios/${version}.json`, `scenario-${version}.json`);
+  const revised = version.endsWith(MAIL_CONTENT_SUFFIX);
+  const baseVersion = revised ? version.slice(0, -MAIL_CONTENT_SUFFIX.length) : version;
+  if (!/^[a-f0-9-]{36}$/.test(baseVersion)) throw new Error("問題のバージョンが正しくありません。");
+  const value = await readJson<EmailScenario>(`settings/scenarios/${baseVersion}.json`, `scenario-${baseVersion}.json`);
   if (!value || value.id !== id) throw new Error("出題内容を確認できません。試験官に申し出てください。");
-  return value;
+  return revised ? { ...revisedEmailScenario(value), version } : value;
 }

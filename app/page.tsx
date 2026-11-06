@@ -26,7 +26,7 @@ export default function StartPage() {
                 <p>試験官が上映する映像を見て、シーンごとに○×と理由・ポイントを記入します。</p>
                 <code>/video-test</code>
               </div>
-              <Link href="/video-test" className="primary-button">動画試験を開く <span>→</span></Link>
+              <Link href="/video-test" className="primary-button" aria-label="動画確認試験を開く">開く</Link>
             </article>
 
             <article>
@@ -36,7 +36,7 @@ export default function StartPage() {
                 <p>提示された状況に基づき、お客様へのメール本文を作成します。</p>
                 <code>/email-test</code>
               </div>
-              <Link href="/email-test" className="primary-button">メール試験を開く <span>→</span></Link>
+              <Link href="/email-test" className="primary-button" aria-label="メール対応力試験を開く">開く</Link>
             </article>
           </div>
         </section>

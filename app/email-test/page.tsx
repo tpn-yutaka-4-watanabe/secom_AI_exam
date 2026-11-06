@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { CandidateBadge } from "../components/CandidateBadge";
 import { ExamShell } from "../components/ExamShell";
 import { ExamStartForm } from "../components/ExamStartForm";
+import { MailRequest } from "../components/MailRequest";
 import { saveReceipt } from "../lib/client-storage";
 import type { EmailScenario, ExamDraft, SubmissionReceipt } from "@/lib/types";
 export default function EmailTestPage() {
@@ -49,9 +50,9 @@ export default function EmailTestPage() {
     {error && <div className="form-error" role="alert">{error}</div>}
     {!scenario ? <p>問題を読み込んでいます。読み込めない場合は試験官に申し出てください。</p> :
       <form onSubmit={submit}><div className="mail-workspace">
-        <section className="mail-card mail-situation"><div className="mail-label"><span>問題 {scenario.id}</span>状況説明</div><div className="mail-situation-scroll" tabIndex={0} aria-label="状況説明とお客様からのご指摘"><div className="mail-body">{scenario.situation}</div><div className="mail-body">{scenario.request}</div></div></section>
+        <section className="mail-card mail-situation"><div className="mail-label"><span>問題 {scenario.id}</span>状況説明</div><div className="mail-situation-scroll" tabIndex={0} aria-label="状況説明とお客様からのご指摘"><div className="mail-body">{scenario.situation}</div><MailRequest text={scenario.request} /></div></section>
         <section className="mail-card reply-mail"><div className="mail-label"><span>回答</span>作成するメール本文</div><div className="reply-fields">
-          <label className="reply-body-field"><span>本文（宛名・挨拶・署名も本文に含めてください）</span><textarea rows={26} value={body} maxLength={20000} onChange={e => setBody(e.target.value)} placeholder="ここにメールの本文を入力してください。" required /><small>{body.length.toLocaleString("ja-JP")}文字</small></label>
+          <label className="reply-body-field"><span>本文</span><textarea rows={26} value={body} maxLength={20000} onChange={e => setBody(e.target.value)} placeholder="ここにメールの本文を入力してください。" required /><small>{body.length.toLocaleString("ja-JP")}文字</small></label>
         </div></section>
       </div><div className="final-confirmation"><label className="check-line"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} /><span>回答内容を確認しました。最終回答として提出します。</span></label></div>
       <div className="exam-actions"><span>再読み込み・画面を閉じると入力内容は失われます。</span><div className="email-submit-area"><button className="primary-button" disabled={!confirmed || submitting}>{submitting ? "回答を保存・採点しています…" : "メール試験の回答を提出する"}</button><p role="note">※処理に時間がかかる場合があります。ボタンを繰り返し押さないでください。</p></div></div></form>}

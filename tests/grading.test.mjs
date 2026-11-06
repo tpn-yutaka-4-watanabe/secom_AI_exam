@@ -159,8 +159,11 @@ test("Brain copy-paste prompt includes exactly the runtime evidence rules and no
   const doc = (await readFile(new URL("../docs/BRAIN_MAIL_GRADING_PROMPT.txt",import.meta.url),"utf8")).replaceAll("\r\n","\n");
   assert.ok(doc.includes(MAIL_EVIDENCE_RULES));
   const section=doc.split("【出力形式】")[1];
-  const example=JSON.parse(section.slice(section.indexOf("{"),section.indexOf("deductionsの各要素：")).trim());
+  assert.doesNotMatch(doc, /[{}]/);
+  const normalized=section.replaceAll("｛","{").replaceAll("｝","}");
+  const example=JSON.parse(normalized.slice(normalized.indexOf("{"),normalized.indexOf("deductionsの各要素：")).trim());
   assert.equal(example.score,undefined);
+  assert.equal(example.max_score,undefined);
   assert.equal(example.criteria.length,12);
   assert.ok(example.criteria.every(c=>Array.isArray(c.evidence)));
 });

@@ -1,5 +1,6 @@
 import type { BrainAttempt, Evaluation, GradingSummary, SubmissionRecord } from "./types";
 import { mailCriteria, MAIL_RUBRIC_VERSION, MAIL_PREVIOUS_VERSIONS, scenarioRubricVersion } from "./mail-grading";
+import { MAIL_DEDUCTION_POINTS } from "./grading-contract";
 
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
@@ -55,7 +56,8 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     [1, 1, 2, 1, 2, 1, 2, 2, 2, 1].map((maxScore, i) => ({ id: `R${String(i + 1).padStart(2, "0")}`, maxScore, name: "" }));
   const maxScore = exam === "video" ? 15 : 20;
   const version = exam === "video" ? "g4-driving-202611-v1" : mailVersion;
-  if (obj.rubric_version !== version || (obj.max_score ?? obj.base_max_score) !== maxScore) throw new Error("採点基準の版または満点が一致しません。");
+  // The rubric, not any model-reported aggregate or overall maximum, fixes the cap.
+  if (obj.rubric_version !== version) throw new Error("採点基準の版が一致しません。");
   const rawCriteria = obj.criteria as unknown[];
   if (rawCriteria.length !== expected.length) throw new Error("項目別点数が不足または重複しています。");
   const criteria = expected.map(rule => {
@@ -82,14 +84,14 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     if (d.decision !== "deduct" && d.decision !== "allow" && d.decision !== "review") throw new Error("NG候補の判定が不正です。");
     return { hitId: hit.id, decision: d.decision as "deduct" | "allow" | "review", comment: text(d.comment) };
   });
-  const deductionRules: Record<string, number> = { D1: 3, D2: 2, D3: 2, D4: 1 };
   if (exam === "email" && !Array.isArray(obj.deductions)) throw new Error("減点明細がありません。");
   const deductions = (exam === "email" ? obj.deductions as unknown[] : []).map(raw => {
     const d = object(raw), id = text(d.id), evidence = text(d.evidence), ngHitIds = strings(d.ng_hit_ids);
-    if (!deductionRules[id] || d.points !== deductionRules[id]) throw new Error("減点配点が一致しません。");
+    if (!Object.hasOwn(MAIL_DEDUCTION_POINTS, id)) throw new Error("減点の種類が不正です。");
     if (id !== "D3" && (!evidence.trim() || !record?.emailTest?.reply.body.includes(evidence))) throw new Error("減点根拠が回答本文にありません。");
     if (ngHitIds.some(hitId => !ngDecisions.some(n => n.hitId === hitId && n.decision === "deduct"))) throw new Error("NG判定と減点明細が一致しません。");
-    return { id, points: d.points as number, evidence, comment: text(d.comment), ngHitIds };
+    // Ignore model-reported points and every subtotal, including in older responses.
+    return { id, points: MAIL_DEDUCTION_POINTS[id], evidence, comment: text(d.comment), ngHitIds };
   });
   for (const d of ngDecisions.filter(d => d.decision === "deduct")) {
     if (deductions.filter(item => item.ngHitIds.includes(d.hitId)).length !== 1) throw new Error("NG候補の減点が欠落または二重計上されています。");

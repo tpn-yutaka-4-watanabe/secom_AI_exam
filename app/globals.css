@@ -217,6 +217,7 @@ input::placeholder, textarea::placeholder { color: #aab1b9; }
 .email-page .mail-label { flex-shrink: 0; }
 .mail-situation-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .email-page .mail-body { min-height: 0; overflow-wrap: anywhere; }
+.mail-request-heading { color: var(--red-dark); font-weight: 700; }
 .email-page .reply-fields { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .email-page .reply-body-field { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: stretch; }
 .email-page .reply-body-field textarea { flex: 1; min-height: 0; height: auto; resize: none; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 35px; }

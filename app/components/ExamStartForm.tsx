@@ -39,10 +39,10 @@ export function ExamStartForm({ examType, onStarted }: { examType: ExamType; onS
         <div className="eyebrow">GRADE 4 CERTIFICATION / EXAM {copy.number}</div>
         <h1>{copy.title}</h1>
         <p>{copy.description}</p>
-        <div className="single-exam-notice">
+        {examType === "video" && <div className="single-exam-notice">
           <strong>受験前の確認</strong>
           <span>{copy.notice}</span>
-        </div>
+        </div>}
       </section>
 
       <section className="start-card" aria-labelledby="candidate-heading">

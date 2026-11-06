@@ -52,11 +52,11 @@ export default function VideoTestPage() {
     <section className="findings-panel video-memo-panel" aria-labelledby="video-memo-heading">
       <div className="panel-heading"><label id="video-memo-heading" htmlFor="video-memo">メモ（採点対象外）</label></div>
       <div className="video-memo-body">
-        <p id="video-memo-help">映像を見ながら自由にメモしてください。メモは提出・保存されません。採点する回答は回答表に記入してください。</p>
+        <p id="video-memo-help">映像を見ながら自由にメモしてください。メモは提出・保存されません。採点する回答は回答欄に記入してください。</p>
         <textarea id="video-memo" rows={6} aria-describedby="video-memo-help" placeholder="気づいたことを自由にメモ" />
       </div>
     </section>
-    <section className="findings-panel"><div className="panel-heading"><span>シーンごとの評価</span><small>同じ指摘を繰り返し記入する必要はありません</small></div>
+    <section className="findings-panel"><div className="panel-heading"><span>回答欄</span><small>同じ指摘を繰り返し記入する必要はありません</small></div>
       <div className="finding-list finding-table-list">
         <div className="finding-column-head" aria-hidden="true"><span>シーン</span><span>○／×</span><span>理由・ポイント</span></div>
         {findings.map((row, i) => <article className="finding-row" key={row.id}><span className="finding-number">{i + 1}</span>
