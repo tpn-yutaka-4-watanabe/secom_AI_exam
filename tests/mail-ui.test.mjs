@@ -45,3 +45,19 @@ test("admin-authored mail text remains plain text, including HTML-looking conten
  const plain="独自の見出し\n本文を変更しない";
  assert.equal(renderToStaticMarkup(createElement(MailRequest,{text:plain})),`<div class="mail-body">${plain}</div>`);
 });
+
+test("the content of both numbered requests is red with normal weight, while the heading stays bold",async()=>{
+ const heading="■お客様からのご指摘・要請内容";
+ for(const scenario of reference.scenarios){
+  const body=scenario.request.slice(heading.length);
+  assert.match(body,/①/);assert.match(body,/②/);
+  const html=renderToStaticMarkup(createElement(MailRequest,{text:scenario.request}));
+  assert.ok(html.includes(`<strong class="mail-request-heading">${heading}</strong><span class="mail-request-content">${body}</span>`));
+  assert.equal((html.match(/mail-request-content/g)||[]).length,1);
+ }
+ const css=await read("app/globals.css");
+ assert.match(css,/\.mail-request-content\s*\{[^}]*color:\s*var\(--red-dark\);[^}]*font-weight:\s*400;/);
+ const preamble="状況説明は通常色\n";
+ const html=renderToStaticMarkup(createElement(MailRequest,{text:preamble+heading+"\n①指摘\n②指摘"}));
+ assert.ok(html.startsWith(`<div class="mail-body">${preamble}<strong`));
+});
