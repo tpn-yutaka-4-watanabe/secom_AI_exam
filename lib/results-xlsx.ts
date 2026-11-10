@@ -60,7 +60,7 @@ export function resultSheets(records: SubmissionRecord[]): Sheet[] {
       const selected = group?.attempts.find(a => a.attempt === s?.selectedAttempt)?.evaluation;
       const prefix: Cell[] = [record.id, record.candidateNumber, record.candidateName, exam === "video" ? "動画" : "メール"];
       const row = summary.rows.length + 1;
-      const reasons = [...new Set([...(group?.attempts.flatMap(a => [a.error ? `採点${a.attempt}: 接続エラー` : "", a.validationError ? `採点${a.attempt}: ${a.validationError}` : "", a.evaluation?.needsReview ? `採点${a.attempt}: 要確認` : ""]).filter(Boolean) || []), ...(selected?.reviewReasons || [])])];
+      const reasons = [...new Set([...(group?.attempts.flatMap(a => [a.error ? `採点${a.attempt}: 接続エラー` : "", a.validationError ? `採点${a.attempt}: ${a.validationError}` : "", a.evaluation?.needsReview ? `採点${a.attempt}: 要確認` : ""]).filter(Boolean) || []), ...(selected?.reviewReasons || []), ...(selected?.processingNotes || [])])];
       summary.rows.push([...prefix, ...(s?.scores || [null, null, null]), { formula: `IF(COUNT(E${row}:G${row})=3,IFERROR(MODE(E${row}:G${row}),MEDIAN(E${row}:G${row})),"")`, value: s?.score ?? null },
         s?.method === "mode" ? "最頻値" : s?.method === "median" ? "中央値" : "未確定", s?.selectedAttempt ?? null, selected?.summary || "",
         (s?.needsReview ? "要確認。" : "") + reasons.join(" / "), new Date(record.submittedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" }), record.emailTest?.scenario?.id && exam === "email" ? record.emailTest.scenario.id : "",

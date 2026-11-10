@@ -1,6 +1,7 @@
 import type { BrainAttempt, Evaluation, GradingSummary, SubmissionRecord } from "./types";
 import { mailCriteria, MAIL_RUBRIC_VERSION, MAIL_PREVIOUS_VERSIONS, scenarioRubricVersion } from "./mail-grading";
 import { MAIL_DEDUCTION_POINTS } from "./grading-contract";
+import { originalQuote, validateMailEvidence, hasQuotedOpeningIdentity } from "./mail-evidence";
 
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
@@ -13,20 +14,6 @@ function integer(value: unknown, max: number): number {
 }
 function text(value: unknown): string { return typeof value === "string" ? value : ""; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []; }
-
-// Repair only the known quote delimiter; never discard or rewrite a non-matching fragment.
-function validateEvidence(value: unknown, body: string, criterionId: string): string[] {
-  const error = () => new Error(`採点項目 ${criterionId} の引用根拠が回答本文にありません。`);
-  if (!Array.isArray(value)) throw error();
-  return value.flatMap(q => {
-    if (typeof q !== "string" || !q.trim()) throw error();
-    // Preserve literal delimiters when they really are part of the original answer.
-    if (body.includes(q)) return [q];
-    const parts = q.split("】【");
-    if (parts.length < 2 || parts.some(part => !part.trim() || !body.includes(part))) throw error();
-    return parts;
-  });
-}
 
 // Only structured results are scores. Never extract arbitrary numbers from prose.
 export function unwrapEvaluation(value: unknown, depth = 0): Obj {
@@ -59,20 +46,30 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
   // The rubric, not any model-reported aggregate or overall maximum, fixes the cap.
   if (obj.rubric_version !== version) throw new Error("採点基準の版が一致しません。");
   const rawCriteria = obj.criteria as unknown[];
+  const body = record?.emailTest?.reply.body || "";
+  const processingNotes: string[] = [];
   if (rawCriteria.length !== expected.length) throw new Error("項目別点数が不足または重複しています。");
   const criteria = expected.map(rule => {
     const matches = rawCriteria.map(object).filter(c => (c.id ?? c.criterion_id) === rule.id);
     if (matches.length !== 1) throw new Error(`採点項目 ${rule.id} が不足または重複しています。`);
     const c = matches[0];
     if (c.max_score !== rule.maxScore) throw new Error(`採点項目 ${rule.id} の配点が一致しません。`);
-    const score = integer(c.score, rule.maxScore);
+    let score = integer(c.score, rule.maxScore);
+    let comment = text(c.comment);
     let evidence: string[] | undefined;
     if (exam === "email" && (version === MAIL_RUBRIC_VERSION || version === "g4-mail-20261019-v1" || c.evidence !== undefined)) {
-      evidence = validateEvidence(c.evidence, record?.emailTest?.reply.body || "", rule.id);
+      evidence = validateMailEvidence(c.evidence, body, rule.id);
+      if (JSON.stringify(evidence) !== JSON.stringify(c.evidence)) processingNotes.push(`${rule.id}：引用の句読点・空白・連結形式を照合し、回答本文の原文へ復元しました。`);
       if (score > 0 && !evidence.length) throw new Error(`採点項目 ${rule.id} の加点根拠がありません。`);
       if (!text(c.comment).trim()) throw new Error(`採点項目 ${rule.id} の判定理由がありません。`);
     }
-    return { id: rule.id, name: rule.name || text(c.name) || rule.id, maxScore: rule.maxScore, score, comment: text(c.comment), evidence };
+    if (exam === "email" && version === MAIL_RUBRIC_VERSION && rule.id === "C1" && score > 0 && !hasQuotedOpeningIdentity(body, evidence || [])) {
+      score = 0;
+      const correction = "C1：宛名と本文冒頭の所属・氏名の名乗りを両方裏付ける引用がないため0点。末尾の署名はC6で評価します。";
+      comment += `\n【アプリ補正】${correction}`;
+      processingNotes.push(correction);
+    }
+    return { id: rule.id, name: rule.name || text(c.name) || rule.id, maxScore: rule.maxScore, score, comment, evidence };
   });
   const knownHits = exam === "email" ? record?.emailTest?.ngHits || [] : [];
   const rawDecisions = exam === "email" ? obj.ng_decisions : [];
@@ -85,18 +82,30 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     return { hitId: hit.id, decision: d.decision as "deduct" | "allow" | "review", comment: text(d.comment) };
   });
   if (exam === "email" && !Array.isArray(obj.deductions)) throw new Error("減点明細がありません。");
-  const deductions = (exam === "email" ? obj.deductions as unknown[] : []).map(raw => {
-    const d = object(raw), id = text(d.id), evidence = text(d.evidence), ngHitIds = strings(d.ng_hit_ids);
+  const deductions = (exam === "email" ? obj.deductions as unknown[] : []).flatMap(raw => {
+    const d = object(raw), id = text(d.id), ngHitIds = strings(d.ng_hit_ids);
     if (!Object.hasOwn(MAIL_DEDUCTION_POINTS, id)) throw new Error("減点の種類が不正です。");
-    if (id !== "D3" && (!evidence.trim() || !record?.emailTest?.reply.body.includes(evidence))) throw new Error("減点根拠が回答本文にありません。");
-    if (ngHitIds.some(hitId => !ngDecisions.some(n => n.hitId === hitId && n.decision === "deduct"))) throw new Error("NG判定と減点明細が一致しません。");
+    // NG decisions are authoritative even if an older prompt grouped, omitted or repeated IDs.
+    const ngSurface = id === "D4" && knownHits.some(hit => {
+      const normalized = text(d.evidence).normalize("NFKC").toLowerCase(), term = hit.term.normalize("NFKC").toLowerCase();
+      return /^[a-z]+$/.test(term) ? new RegExp(`(^|[^a-z0-9])${term}([^a-z0-9]|$)`, "i").test(normalized) : normalized.includes(term);
+    });
+    if (id === "D4" && (ngHitIds.length > 0 || ngSurface)) return [];
+    if (ngHitIds.length) throw new Error("NG由来の減点はng_decisionsだけで判定してください。");
+    const rawEvidence = text(d.evidence), evidence = id === "D3" ? rawEvidence : originalQuote(rawEvidence, body);
+    if (evidence === null) throw new Error("減点根拠が回答本文にありません。");
     // Ignore model-reported points and every subtotal, including in older responses.
-    return { id, points: MAIL_DEDUCTION_POINTS[id], evidence, comment: text(d.comment), ngHitIds };
+    return [{ id, points: MAIL_DEDUCTION_POINTS[id], evidence, comment: text(d.comment), ngHitIds: [] as string[] }];
   });
-  for (const d of ngDecisions.filter(d => d.decision === "deduct")) {
-    if (deductions.filter(item => item.ngHitIds.includes(d.hitId)).length !== 1) throw new Error("NG候補の減点が欠落または二重計上されています。");
+  for (const decision of ngDecisions.filter(d => d.decision === "deduct")) {
+    const hit = knownHits.find(h => h.id === decision.hitId)!;
+    const line = body.split(/\r?\n/)[hit.line - 1];
+    const term = hit.term.normalize("NFKC").toLowerCase();
+    const evidence = line && line.normalize("NFKC").toLowerCase().includes(term) ? line : originalQuote(text(hit.context), body) || originalQuote(hit.term, body);
+    if (!evidence) throw new Error("NG候補の原文を確認できません。");
+    deductions.push({ id: "D4", points: 1, evidence, comment: `NG語「${hit.term}」：${decision.comment}`, ngHitIds: [hit.id] });
   }
-  const keys = deductions.map(d => `${d.id}:${d.evidence}:${d.comment}`);
+  const keys = deductions.map(d => `${d.id}:${d.evidence}:${d.comment}:${d.ngHitIds.join(",")}`);
   if (new Set(keys).size !== keys.length) throw new Error("同一の減点明細が重複しています。");
   const score = Math.max(0, criteria.reduce((sum, c) => sum + c.score, 0) - deductions.reduce((sum, d) => sum + d.points, 0));
   // Model-reported totals (score/base_score) are ignored; validated line items are authoritative.
@@ -106,7 +115,7 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
   if (exam === "video" && bonus?.matched) reviewReasons.push("動画の加点候補あり（配点未確定・通常点には加算していません）");
   return { rubricVersion: version, score, maxScore, criteria, deductions, summary: text(obj.summary),
     needsReview: obj.needs_review === true || obj.status === "needs_review" || reviewReasons.length > 0 || Boolean(bonus?.matched) || ngDecisions.some(d => d.decision === "review"),
-    reviewReasons, ngDecisions };
+    reviewReasons, ngDecisions, processingNotes };
 }
 
 export function summarizeAttempts(attempts: BrainAttempt[]): GradingSummary {
@@ -134,5 +143,7 @@ export function withGradingSummaries(record: SubmissionRecord): SubmissionRecord
     });
     grading[exam] = { ...group, attempts, summary: summarizeAttempts(attempts) };
   }
-  return { ...record, grading };
+  const groups = [...(record.videoTest ? [grading.video] : []), ...(record.emailTest ? [grading.email] : [])];
+  const complete = groups.length > 0 && groups.every(group => group?.summary?.score != null);
+  return { ...record, grading, overallStatus: complete ? "completed" : "grading_error" };
 }

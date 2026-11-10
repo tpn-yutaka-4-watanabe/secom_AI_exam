@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { filterSubmissions, submissionDateJst, submissionDateOptions } from "@/lib/submission-dates";
 import type {
   BrainAttempt,
   EmailScenario,
@@ -17,6 +18,7 @@ function GradeSummary({ result }: { result?: GradingResult }) {
     <p>3回の得点：{s?.scores.map(v => v ?? "未取得").join(" / ") || "未取得"}　／　{s?.method === "mode" ? "最頻値" : s?.method === "median" ? "中央値" : "3回分の正常な採点が必要です"}</p>
     {s?.needsReview && <p className="attempt-error">要確認：得点は暫定です。接続・形式・採点内容を確認してください。</p>}
     {selected && <><p>共有する評価：採点{s?.selectedAttempt}回目</p><p>{selected.summary}</p>
+      {selected.processingNotes?.map((note, i) => <p className="grading-processing-note" key={i}>アプリ処理：{note}</p>)}
       {selected.rubricVersion === "g4-mail-20261102-v2" && <p>共通：{selected.criteria.filter(c => c.id.startsWith("C")).reduce((n,c) => n+c.score,0)} / 10　設問別：{selected.criteria.filter(c => c.id.startsWith("S")).reduce((n,c) => n+c.score,0)} / 8　特別加点：{selected.criteria.filter(c => c.id.startsWith("B")).reduce((n,c) => n+c.score,0)} / 2　減点：{selected.deductions.reduce((n,d) => n+d.points,0)}</p>}
       <p>採点基準：{selected.rubricVersion}</p>
       <table className="score-table"><thead><tr><th>評価項目</th><th>点数</th><th>評価・引用根拠</th></tr></thead><tbody>{selected.criteria.map(c => <tr key={c.id}><td>{c.id.startsWith("B") ? "特別加点：" : ""}{c.name}</td><td>{c.score} / {c.maxScore}</td><td>{c.comment}{c.evidence && <div>根拠：{c.evidence.length ? c.evidence.map(q => `「${q}」`).join(" / ") : "該当記述なし"}</div>}</td></tr>)}</tbody></table>
@@ -29,10 +31,10 @@ function BrainAttempts({ attempts = [] }: { attempts?: BrainAttempt[] }) {
   return (
     <div className="attempt-grid">
       {attempts.map((attempt) => (
-        <article className={`attempt-card ${attempt.status}`} key={attempt.attempt}>
+        <article className={`attempt-card ${attempt.evaluation ? "success" : "error"}`} key={attempt.attempt}>
           <div className="attempt-head">
             <strong>採点 {attempt.attempt}回目</strong>
-            <span>{attempt.status === "success" ? "完了" : "エラー"}</span>
+            <span>{attempt.evaluation ? "完了" : "未確定"}</span>
           </div>
           {attempt.httpStatus && <small>HTTP {attempt.httpStatus}</small>}
           {attempt.status === "success" ? (
@@ -44,6 +46,9 @@ function BrainAttempts({ attempts = [] }: { attempts?: BrainAttempt[] }) {
           ) : (
             <p className="attempt-error">{attempt.error}</p>
           )}
+          {attempt.retryHistory && <details><summary>自動再試行の履歴（全{attempt.retryHistory.length}送信）</summary>
+            {attempt.retryHistory.map(item => <div key={item.retry}><p>送信{item.retry + 1}：HTTP {item.httpStatus ?? "未取得"} ／ {item.evaluation ? `${item.evaluation.score}点${item.evaluation.needsReview ? "（要確認）" : ""}` : item.validationError || item.error || "未確定"}</p><pre>{JSON.stringify(item.response ?? item.message, null, 2)}</pre></div>)}
+          </details>}
         </article>
       ))}
       {!attempts.length && <p className="no-attempts">採点結果はありません。</p>}
@@ -73,18 +78,17 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
   const [exporting, setExporting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [loadedAt, setLoadedAt] = useState(0);
+  const [regradingId, setRegradingId] = useState<string | null>(null);
+  const [regradeMessage, setRegradeMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [savingEmail, setSavingEmail] = useState(false);
   const [error, setError] = useState("");
   const [settingsMessage, setSettingsMessage] = useState("");
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return submissions;
-    return submissions.filter((item) =>
-      `${item.candidateNumber} ${item.candidateName} ${item.id} ${examTypeLabel(item)}`.toLowerCase().includes(needle),
-    );
-  }, [query, submissions]);
+  const dates = useMemo(() => submissionDateOptions(submissions), [submissions]);
+  const filtered = useMemo(() => filterSubmissions(submissions, selectedDate, query), [query, submissions, selectedDate]);
   const selected = filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
 
   function adminHeaders(contentType = false) {
@@ -113,6 +117,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
       if (!submissionsResponse.ok) throw new Error(submissionsPayload.error || "管理画面を開けませんでした。");
       if (!settingsResponse.ok) throw new Error(settingsPayload.error || "試験設定を読み込めませんでした。");
       setSubmissions(submissionsPayload.submissions ?? []);
+      setLoadedAt(Date.now());
       setSelectedId(submissionsPayload.submissions?.[0]?.id ?? null);
       setScenario(settingsPayload.scenario ?? null);
       setOptions(settingsPayload.options ?? []);
@@ -161,6 +166,21 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
     finally { setExporting(false); }
   }
 
+  async function regradeEmail(record: SubmissionRecord) {
+    if (regradingId) return;
+    setRegradingId(record.id); setError(""); setRegradeMessage("");
+    try {
+      const response = await fetch("/api/admin/regrade-email", { method: "POST", headers: adminHeaders(true), body: JSON.stringify({ id: record.id }) });
+      const payload = await response.json() as { submission?: SubmissionRecord; error?: string };
+      if (!response.ok || !payload.submission) throw new Error(payload.error || "再採点に失敗しました。");
+      const updated = payload.submission;
+      setSubmissions(items => items.map(item => item.id === updated.id ? updated : item));
+      setLoadedAt(Date.now());
+      setRegradeMessage(updated.grading.email?.summary?.score != null ? "メールを再採点しました。以前の採点結果も保存しています。" : "再試行後も採点未確定です。送信履歴を確認してください。以前の結果は保存されています。");
+    } catch (e) { setError(e instanceof Error ? e.message : "再採点に失敗しました。"); }
+    finally { setRegradingId(null); }
+  }
+
   if (!authenticated) {
     return (
       <main className="admin-login-page">
@@ -179,8 +199,8 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
     );
   }
 
-  const completed = submissions.filter((item) => item.overallStatus === "completed").length;
-  const errors = submissions.length - completed;
+  const completed = filtered.filter((item) => item.overallStatus === "completed").length;
+  const errors = filtered.length - completed;
 
   return (
     <main className="admin-page">
@@ -190,7 +210,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
       </header>
 
       <section className="admin-summary">
-        <div><span>提出件数</span><strong>{submissions.length}</strong><small>件</small></div>
+        <div><span>表示対象の提出件数</span><strong>{filtered.length}</strong><small>件</small></div>
         <div><span>採点完了</span><strong>{completed}</strong><small>件</small></div>
         <div><span>採点未完了</span><strong>{errors}</strong><small>件</small></div>
       </section>
@@ -213,12 +233,17 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
       </section>
 
       {settingsMessage && <div className="admin-settings-message success">{settingsMessage}</div>}
+      {regradeMessage && <div className="admin-settings-message success">{regradeMessage}</div>}
       {error && <div className="admin-settings-message error">{error}</div>}
 
       <div className="admin-workspace">
         <aside className="submission-list">
           <div className="list-head">
             <div><span className="eyebrow">SUBMISSIONS</span><h1>受験結果</h1></div>
+            <label className="submission-date-filter"><span>提出日（日本時間）</span><select value={selectedDate} onChange={event => { setSelectedDate(event.target.value); setSelectedId(null); }}>
+              <option value="">すべての日付</option>
+              {dates.map(item => <option key={item.date} value={item.date}>{item.date}（{item.count}件）</option>)}
+            </select></label>
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="研修番号／受験番号・氏名・試験種別で検索" aria-label="受験結果を検索" />
           </div>
           <div className="submission-items">
@@ -226,7 +251,7 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
               <button key={item.id} className={selected?.id === item.id ? "selected" : ""} onClick={() => setSelectedId(item.id)}>
                 <span className={`result-dot ${item.overallStatus}`} />
                 <span><strong>{item.candidateNumber}</strong><small>{item.candidateName}</small><em>{examTypeLabel(item)}</em></span>
-                <time>{new Date(item.submittedAt).toLocaleDateString("ja-JP")}</time>
+                <time dateTime={item.submittedAt}>{submissionDateJst(item.submittedAt) || "日時不明"}</time>
               </button>
             ))}
             {!filtered.length && <div className="empty-list">該当する受験結果はありません。</div>}
@@ -240,10 +265,10 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
                 <div>
                   <span className="eyebrow">RESULT DETAIL / {examTypeLabel(selected)}</span>
                   <h2>{selected.candidateName} <small>{selected.candidateNumber}</small></h2>
-                  <p>受付番号 {selected.id} ／ {new Date(selected.submittedAt).toLocaleString("ja-JP")}</p>
+                  <p>受付番号 {selected.id} ／ {new Date(selected.submittedAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}（日本時間）</p>
                 </div>
                 <span className={`result-pill ${selected.overallStatus}`}>
-                  {selected.overallStatus === "completed" ? "採点完了" : "接続エラーあり"}
+                  {selected.gradingState === "grading" ? "採点中" : selected.overallStatus === "completed" ? "採点完了" : "採点未確定"}
                 </span>
               </div>
 
@@ -278,6 +303,10 @@ export function AdminDashboard({ accessKey }: { accessKey: string }) {
                   </div>
                   <GradeSummary result={selected.grading.email} />
                   <BrainAttempts attempts={selected.grading.email?.attempts} />
+                  <div className="mail-regrade-actions"><p>同じ回答・出題内容で3回分を採点し直します。不正な返答は各回最大2回まで自動再試行し、以前の採点結果も保存します。</p>
+                    <button className="secondary-button" disabled={regradingId !== null || !selected.emailTest.scenario || (selected.gradingState === "grading" && loadedAt - Date.parse(selected.gradingStartedAt || "") < 4 * 60_000)} onClick={() => void regradeEmail(selected)}>{regradingId === selected.id ? "メールを再採点しています…" : "メールを再採点する"}</button>
+                  </div>
+                  {selected.previousEmailGradings?.length ? <details><summary>再採点前の保存履歴（{selected.previousEmailGradings.length}件）</summary><pre className="previous-grading-record">{JSON.stringify(selected.previousEmailGradings, null, 2)}</pre></details> : null}
                 </section>
               )}
             </>

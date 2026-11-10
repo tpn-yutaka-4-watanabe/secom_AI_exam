@@ -67,8 +67,9 @@ test("mail deductions require real evidence and NG decisions, signature BE can b
   }
   assert.equal(parseEvaluation({...result, score:999, criteria:result.criteria.map(c=>({...c,score:0}))},"email",record).score,0);
   assert.throws(() => parseEvaluation({...result,ng_decisions:[]},"email",record));
-  assert.throws(() => parseEvaluation({...result,deductions:[{...result.deductions[0],evidence:"架空の本文"}]},"email",record));
-  assert.throws(() => parseEvaluation({...result,deductions:[...result.deductions,...result.deductions]},"email",record));
+  assert.equal(parseEvaluation({...result,deductions:[{...result.deductions[0],evidence:"架空の本文"}]},"email",record).score,19);
+  assert.equal(parseEvaluation({...result,deductions:[...result.deductions,...result.deductions]},"email",record).score,19);
+  assert.throws(() => parseEvaluation({...result,deductions:[{id:"D1",evidence:"架空の本文",comment:"未確認の確約"}]},"email",record));
 });
 test("2-3 parses and old results retain their original rubric without accepting old live responses", () => {
   const result = (id, version) => ({rubric_version:version,score:20,max_score:20,criteria:mailCriteria(id,version).map(c=>({id:c.id,max_score:c.maxScore,score:c.maxScore,comment:"充足"})),deductions:[],ng_decisions:[],summary:"評価"});
@@ -146,10 +147,12 @@ test("C3/C4 joined evidence is split only when every fragment exists; raw respon
   assert.equal(hydrated.grading.email.attempts[0].validationError,undefined);
   assert.equal(JSON.stringify(record),original);
   assert.ok(JSON.stringify(resultSheets([record])).includes("引用："+parts[0]));
-  for (const quote of [parts[0]+"】【架空の引用", "】【"+parts[0], parts[0]+"】【", parts[0]+"】【】【"+parts[1], parts.join("…"), parts[0]+" 】【"+parts[1]]) {
+  for (const quote of [parts[0]+"】【架空の引用", "】【"+parts[0], parts[0]+"】【", parts[0]+"】【】【"+parts[1], parts.join("…")]) {
     const invalid=structuredClone(result); invalid.criteria.find(c=>c.id==="C3").evidence=[quote];
     assert.throws(()=>parseEvaluation(invalid,"email",record));
   }
+  const spaced=structuredClone(result); spaced.criteria.find(c=>c.id==="C3").evidence=[parts[0]+" 】【"+parts[1]];
+  assert.deepEqual(parseEvaluation(spaced,"email",record).criteria.find(c=>c.id==="C3").evidence,parts.slice(0,2));
   const literal={...record,emailTest:{...record.emailTest,reply:{body:parts.join("】【")}}};
   assert.deepEqual(parseEvaluation(result,"email",literal).criteria.find(c=>c.id==="C3").evidence,[parts.join("】【")]);
 });

@@ -108,6 +108,8 @@ export async function POST(request: Request) {
       startedAt: input.startedAt,
       submittedAt,
       overallStatus: "grading_error",
+      gradingState: "grading",
+      gradingStartedAt: submittedAt,
       grading: {},
     };
 
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
     record.grading = await gradeSubmission(record);
     const gradingStatus = input.examType === "video" ? record.grading.video?.status : record.grading.email?.status;
     record.overallStatus = gradingStatus === "completed" ? "completed" : "grading_error";
+    record.gradingState = "finished";
     await saveSubmission(record);
 
     return NextResponse.json({

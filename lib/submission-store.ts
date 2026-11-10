@@ -21,6 +21,18 @@ function localRecordPath(id: string) {
   return path.join(process.cwd(), "data", "submissions", id, "record.json");
 }
 
+export async function getSubmission(id: string): Promise<SubmissionRecord | null> {
+  if (!/^[a-zA-Z0-9-]{1,100}$/.test(id)) throw new Error("受付番号が不正です。");
+  const container = await azureContainer();
+  if (container) {
+    const client = container.getBlobClient(`submissions/${id}/record.json`);
+    if (!(await client.exists())) return null;
+    return JSON.parse((await client.downloadToBuffer()).toString("utf8")) as SubmissionRecord;
+  }
+  try { return JSON.parse(await fs.readFile(localRecordPath(id), "utf8")) as SubmissionRecord; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+}
+
 async function saveLocal(record: SubmissionRecord) {
   const target = localRecordPath(record.id);
   await fs.mkdir(path.dirname(target), { recursive: true });

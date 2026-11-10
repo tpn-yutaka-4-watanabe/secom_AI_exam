@@ -11,7 +11,7 @@ const { gradeSubmission } = await loadTs("lib/brain-api.ts");
 const reference = JSON.parse(await readFile(new URL("../lib/mail-reference-v2.json",import.meta.url),"utf8"));
 
 function fixture(id, bonus = 1) {
-  const body = "確認して改めてご回答いたします。";
+  const body = "納谷様\nセコム原宿支社の河野と申します。\n確認して改めてご回答いたします。";
   const record = {id:`mail-v2-${id}`,candidateNumber:"0099",candidateName:"検証",submittedAt:"2026-11-02T00:00:00Z",emailTest:{scenario:reference.scenarios.find(s=>s.id===id),reply:{body},ngHits:[]}};
   const response = {rubric_version:MAIL_RUBRIC_VERSION,max_score:20,score:999,criteria:mailCriteria(id).map(c=>({id:c.id,max_score:c.maxScore,score:c.id.startsWith("B") ? bonus : c.maxScore,evidence:c.id.startsWith("B") && !bonus ? [] : [body],comment:"検証用の形式・数値"})),deductions:[],ng_decisions:[],summary:"形式検証"};
   return {record,response};

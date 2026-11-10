@@ -28,6 +28,8 @@ export type BrainAttempt = {
   httpStatus?: number;
   evaluation?: Evaluation;
   validationError?: string;
+  retryable?: boolean;
+  retryHistory?: Array<Omit<BrainAttempt, "retryHistory"> & { retry: number }>;
 };
 
 export type ScoreItem = { id: string; name: string; maxScore: number; score: number; comment: string; evidence?: string[] };
@@ -42,6 +44,7 @@ export type Evaluation = {
   needsReview: boolean;
   reviewReasons: string[];
   ngDecisions?: { hitId: string; decision: "deduct" | "allow" | "review"; comment: string }[];
+  processingNotes?: string[];
 };
 export type NgHit = { id: string; ruleId: string; term: string; line: number; context: string; signatureCandidate: boolean; note: string };
 export type EmailScenario = { id: string; title: string; situation: string; request: string; version: string; enabled: boolean; rubricVersion?: string };
@@ -85,6 +88,9 @@ export type SubmissionRecord = {
   startedAt: string;
   submittedAt: string;
   overallStatus: "completed" | "grading_error";
+  gradingState?: "grading" | "finished";
+  gradingStartedAt?: string;
+  previousEmailGradings?: Array<{ savedAt: string; grading?: GradingResult; ngHits?: NgHit[] }>;
   videoTest?: {
     videoFile?: string;
     findings: VideoFinding[];

@@ -2,6 +2,7 @@ import type { BrainAttempt, GradingResult, SubmissionRecord } from "./types";
 import { mailGradingPrompt } from "./mail-grading";
 import { parseEvaluation, summarizeAttempts } from "./grading-results";
 import { JSON_OUTPUT_RULE, VIDEO_LANGUAGE_RULE } from "./grading-contract";
+import { randomUUID } from "node:crypto";
 
 const brainPath = "/api/v1/prediction";
 
@@ -101,6 +102,7 @@ async function runAttempt(
       startedAt,
       completedAt: new Date().toISOString(),
       error: error instanceof Error ? error.message : "BrainAPIへの接続に失敗しました。",
+      retryable: !(error instanceof BrainConfigurationError) && (httpStatus === undefined || httpStatus === 408 || httpStatus === 429 || httpStatus >= 500),
       httpStatus,
       response: raw,
     };
@@ -113,20 +115,45 @@ async function gradeThreeTimes(
   examType: ExamType,
   record: SubmissionRecord,
 ): Promise<GradingResult> {
-  const attempts: BrainAttempt[] = [];
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const result = await runAttempt(prompt, `${uidPrefix}-${attempt}`, attempt, examType);
-    if (result.status === "success") {
-      try { result.evaluation = parseEvaluation(result.response, examType, record); }
-      catch (e) { result.validationError = e instanceof Error ? e.message : "採点結果の形式が不正です。"; }
+  async function logicalAttempt(attempt: number): Promise<BrainAttempt> {
+    const history: NonNullable<BrainAttempt["retryHistory"]> = [];
+    let fallback: BrainAttempt | undefined, latest: BrainAttempt | undefined;
+    const retries = examType === "email" ? 2 : 0;
+    for (let retry = 0; retry <= retries; retry += 1) {
+      const uid = retry ? `${uidPrefix}-${attempt}-retry-${retry}-${randomUUID()}` : `${uidPrefix}-${attempt}`;
+      const result = await runAttempt(prompt, uid, attempt, examType);
+      latest = result;
+      if (result.status === "success") {
+        try { result.evaluation = parseEvaluation(result.response, examType, record); }
+        catch (e) { result.validationError = e instanceof Error ? e.message : "採点結果の形式が不正です。"; }
+      }
+      history.push({ ...result, retry });
+      if (result.evaluation) fallback = result;
+      if ((result.evaluation && !result.evaluation.needsReview) || (result.status === "error" && result.retryable === false)) break;
     }
-    attempts.push(result);
+    // Never replace a parseable provisional score with an unusable retry response.
+    const adopted = fallback ?? latest!;
+    return history.length > 1 ? { ...adopted, retryHistory: history } : adopted;
+  }
+  const attempts: BrainAttempt[] = [];
+  if (examType === "email") {
+    // Three independent slots; at most three 60-second rounds, not nine sequential waits.
+    const pending: Promise<BrainAttempt>[] = [];
+    for (let attempt = 1; attempt <= 3; attempt += 1) pending.push(logicalAttempt(attempt));
+    attempts.push(...await Promise.all(pending));
+  } else {
+    for (let attempt = 1; attempt <= 3; attempt += 1) attempts.push(await logicalAttempt(attempt));
   }
   return {
     status: attempts.every((attempt) => attempt.status === "success" && attempt.evaluation) ? "completed" : "error",
     attempts,
     summary: summarizeAttempts(attempts),
   };
+}
+
+export async function gradeEmailSubmission(record: SubmissionRecord) {
+  if (!record.emailTest) throw new Error("メール回答がありません。");
+  return gradeThreeTimes(emailPrompt(record), `${record.id}-email-regrade-${randomUUID()}`, "email", record);
 }
 
 function videoPrompt(record: SubmissionRecord) {
