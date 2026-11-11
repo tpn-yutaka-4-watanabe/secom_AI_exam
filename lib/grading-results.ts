@@ -1,7 +1,7 @@
 import type { BrainAttempt, Evaluation, GradingSummary, SubmissionRecord } from "./types";
 import { mailCriteria, MAIL_RUBRIC_VERSION, MAIL_PREVIOUS_VERSIONS, scenarioRubricVersion } from "./mail-grading";
 import { MAIL_DEDUCTION_POINTS } from "./grading-contract";
-import { originalQuote, validateMailEvidence, hasQuotedOpeningIdentity } from "./mail-evidence";
+import { originalQuote, validateMailEvidence } from "./mail-evidence";
 
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
@@ -54,20 +54,14 @@ export function parseEvaluation(value: unknown, exam: "video" | "email", record?
     if (matches.length !== 1) throw new Error(`採点項目 ${rule.id} が不足または重複しています。`);
     const c = matches[0];
     if (c.max_score !== rule.maxScore) throw new Error(`採点項目 ${rule.id} の配点が一致しません。`);
-    let score = integer(c.score, rule.maxScore);
-    let comment = text(c.comment);
+    const score = integer(c.score, rule.maxScore);
+    const comment = text(c.comment);
     let evidence: string[] | undefined;
     if (exam === "email" && (version === MAIL_RUBRIC_VERSION || version === "g4-mail-20261019-v1" || c.evidence !== undefined)) {
       evidence = validateMailEvidence(c.evidence, body, rule.id);
       if (JSON.stringify(evidence) !== JSON.stringify(c.evidence)) processingNotes.push(`${rule.id}：引用の句読点・空白・連結形式を照合し、回答本文の原文へ復元しました。`);
       if (score > 0 && !evidence.length) throw new Error(`採点項目 ${rule.id} の加点根拠がありません。`);
       if (!text(c.comment).trim()) throw new Error(`採点項目 ${rule.id} の判定理由がありません。`);
-    }
-    if (exam === "email" && version === MAIL_RUBRIC_VERSION && rule.id === "C1" && score > 0 && !hasQuotedOpeningIdentity(body, evidence || [])) {
-      score = 0;
-      const correction = "C1：宛名と本文冒頭の所属・氏名の名乗りを両方裏付ける引用がないため0点。末尾の署名はC6で評価します。";
-      comment += `\n【アプリ補正】${correction}`;
-      processingNotes.push(correction);
     }
     return { id: rule.id, name: rule.name || text(c.name) || rule.id, maxScore: rule.maxScore, score, comment, evidence };
   });

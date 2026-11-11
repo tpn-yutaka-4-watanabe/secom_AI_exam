@@ -6,7 +6,7 @@ import { loadTs } from "./load-ts.mjs";
 const { parseEvaluation, withGradingSummaries } = await loadTs("lib/grading-results.ts");
 const { mailCriteria, mailGradingPrompt, MAIL_RUBRIC_VERSION } = await loadTs("lib/mail-grading.ts");
 const { detectNgWords } = await loadTs("lib/ng-words.ts");
-const { originalQuote, validateMailEvidence, hasQuotedOpeningIdentity } = await loadTs("lib/mail-evidence.ts");
+const { originalQuote, validateMailEvidence } = await loadTs("lib/mail-evidence.ts");
 const { submissionDateJst, submissionDateOptions, filterSubmissions } = await loadTs("lib/submission-dates.ts");
 const { regradeSavedEmail } = await loadTs("lib/regrade-mail.ts");
 const { gradeSubmission, gradeEmailSubmission } = await loadTs("lib/brain-api.ts");
@@ -67,30 +67,69 @@ test("fullwidth NG terms restore their real answer lines and allowed/review term
   assert.equal(parsed.score, 19); assert.equal(parsed.needsReview, true);
 });
 
-test("C1 requires both opening addressee and quoted introduction; a trailing signature is only C6", () => {
-  for (const [address, intro, expected] of [[true, true, 20], [false, true, 19], [true, false, 19], [false, false, 19]]) {
+test("C1 uses the model's item score without app-level wording or position rescoring", () => {
+  for (const [address, intro, modelScore] of [[true, true, 1], [false, true, 0], [true, false, 0], [false, false, 0]]) {
     const body = `${address ? "納谷様\n" : ""}${intro ? introduction + "\n" : ""}このたびは申し訳ございません。\n確認して回答いたします。\n何卒よろしくお願い申し上げます。\n${signature}`;
     const { record, response } = fixture(body);
     const c1 = response.criteria.find(c => c.id === "C1");
+    c1.score = modelScore;
     c1.evidence = [...(address ? ["納谷様"] : []), intro ? introduction : signature];
     const parsed = parseEvaluation(response, "email", record);
-    assert.equal(parsed.score, expected, `address=${address}, intro=${intro}`);
+    assert.equal(parsed.score, 19 + modelScore, `address=${address}, intro=${intro}`);
+    assert.equal(parsed.criteria.find(c => c.id === "C1").score, modelScore);
     assert.equal(parsed.criteria.find(c => c.id === "C6").score, 1);
-    if (expected === 19) assert.ok(parsed.processingNotes.some(n => n.startsWith("C1")));
+    assert.ok(!parsed.processingNotes.some(n => n.startsWith("C1")));
   }
   const { record, response } = fixture();
   response.criteria.find(c => c.id === "C1").evidence = ["納谷様", signature];
-  assert.equal(parseEvaluation(response, "email", record).score, 19, "signature evidence must not substitute even when an intro exists elsewhere");
-  assert.equal(hasQuotedOpeningIdentity(defaultBody, ["納谷様", introduction]), true);
-  const customerOnlyAffiliation = `株式会社顧客\n納谷様\n河野と申します。\nこのたびは申し訳ございません。\n${signature}`;
-  assert.equal(hasQuotedOpeningIdentity(customerOnlyAffiliation, [customerOnlyAffiliation]), false, "the customer's company is not the examinee's affiliation");
-  assert.equal(hasQuotedOpeningIdentity(`納谷様\nいつもお世話になっております。${introduction}\nこのたびは申し訳ございません。\n${signature}`, ["納谷様", introduction]), true, "greeting on the same line need not be quoted as part of the introduction");
-  for (const intro of ["セコム原宿支社の山田です。", "セコム株式会社 原宿支社\n山田と申します。", "セコム原宿支社の山田でございます。"]) {
-    const body = `納谷様\n${intro}\nこのたびは申し訳ございません。\n${signature}`;
-    assert.equal(hasQuotedOpeningIdentity(body, ["納谷様", intro]), true, intro);
+  assert.equal(parseEvaluation(response, "email", record).score, 20, "valid quoted text is not semantically regraded by the app; signature exclusion is the model's rubric rule");
+  response.criteria.find(c => c.id === "C1").score = 0;
+  assert.equal(parseEvaluation(response, "email", record).score, 19, "the app also never upgrades a model zero");
+});
+
+test("C1 accepts the reported greeting-before-introduction and has no line, length or fixed phrase constraints", () => {
+  const address = "納谷　大将　様", intro = "セコム（株）システム業務部の河野と申します。";
+  const bodies = [
+    `${address}\n\nこの度は弊社サービスをご導入いただきありがとうございます。\n${intro}\n\n確認して回答いたします。`,
+    `件名：ご回答\n株式会社顧客\n代表取締役\n${address}\n${intro}`,
+    `${address}\n${"ご挨拶申し上げます。\n".repeat(150)}${intro}`,
+    `${address}\n所属：セコム（株）システム業務部\n河野であります。`,
+  ];
+  for (const body of bodies) {
+    const { record, response } = fixture(body);
+    const c1 = response.criteria.find(c => c.id === "C1");
+    c1.evidence = [address, body.includes(intro) ? intro : "所属：セコム（株）システム業務部\n河野であります。"];
+    const parsed = parseEvaluation(response, "email", record);
+    assert.equal(parsed.criteria.find(c => c.id === "C1").score, 1);
+    assert.equal(parsed.score, 20);
+    assert.doesNotMatch(parsed.criteria.find(c => c.id === "C1").comment, /アプリ補正/);
   }
-  assert.equal(hasQuotedOpeningIdentity(`納谷様\n確認して回答いたします。\n何卒よろしくお願い申し上げます。\n${introduction}`, ["納谷様", introduction]), false);
-  for (const body of Object.values(reference.modelAnswers)) assert.equal(hasQuotedOpeningIdentity(body, [body]), true, "all three reference answers keep full C1 eligibility");
+});
+
+test("saved responses and Excel recover C1 without AI resubmission or mutations, while evidence and score guards remain", async () => {
+  const body = "納谷　大将　様\nこの度は弊社サービスをご導入いただきありがとうございます。\nセコム（株）システム業務部の河野と申します。";
+  const { record, response } = fixture(body);
+  record.grading.email = group(response);
+  record.grading.email.attempts.forEach(a => { a.evaluation = { score: 19, criteria: [{ id: "C1", score: 0, comment: "【アプリ補正】旧結果" }] }; });
+  const original = JSON.stringify(record), restored = withGradingSummaries(record);
+  assert.deepEqual(restored.grading.email.summary.scores, [20, 20, 20]);
+  assert.ok(restored.grading.email.attempts.every(a => a.evaluation.criteria.find(c => c.id === "C1").score === 1));
+  const sheets = resultSheets([record]);
+  assert.deepEqual(sheets[0].rows[1].slice(4, 7), [20, 20, 20]);
+  assert.equal(sheets[0].rows[1][7].value, 20);
+  assert.doesNotMatch(JSON.stringify(sheets), /アプリ補正/);
+  assert.equal(JSON.stringify(record), original);
+  for (const score of [-1, 2, "1"]) {
+    const invalid = structuredClone(response); invalid.criteria.find(c => c.id === "C1").score = score;
+    assert.throws(() => parseEvaluation(invalid, "email", record));
+  }
+  for (const evidence of [[], ["存在しない根拠"]]) {
+    const invalid = structuredClone(response); invalid.criteria.find(c => c.id === "C1").evidence = evidence;
+    assert.throws(() => parseEvaluation(invalid, "email", record));
+  }
+  const parser = await readFile(new URL("../lib/grading-results.ts", import.meta.url), "utf8");
+  const evidence = await readFile(new URL("../lib/mail-evidence.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(parser + evidence, /hasQuotedOpeningIdentity|selfIntroduction|slice\(0, 3\)|1200|【アプリ補正】/);
 });
 
 test("punctuation, whitespace and joined quotes are restored to exact original text without fuzzy words", () => {
